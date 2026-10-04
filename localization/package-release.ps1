@@ -73,10 +73,12 @@ if ($isRtx2030) {
     }
     foreach ($pair in @(
         @('manifest.json','Licenses/RTX20-30-FP16-manifest.json'),
+        @('MENU-MANIFEST','Licenses/OptiScaler-Transfusion-menu-manifest.json'),
         @('SOURCE-PATCH','Licenses/OptiScaler-Transfusion-SourcePatch.zip')
     )) {
         $target = Join-Path $payload $pair[1]
         if ($pair[0] -eq 'SOURCE-PATCH') { Compress-Archive -Path (Join-Path $patch 'SourcePatch/*') -DestinationPath $target }
+        elseif ($pair[0] -eq 'MENU-MANIFEST') { Copy-Item (Join-Path $patch 'manifest.json') $target }
         else { Copy-Item (Join-Path $components $pair[0]) $target }
         $expectedFiles[$pair[1].Replace('/','\')] = (Get-FileHash $target).Hash
     }

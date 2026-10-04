@@ -26,6 +26,9 @@ $panel = $panel.Insert($at, $keyboard + "`n")
 # Keep ASCII symbols supported by the existing OptiScaler font (no ReShade icon font).
 $icons = @{ '\xef\x80\xa1'='!'; '\xef\x83\xa2'='R'; '\xef\x80\x8c'='+'; '\xef\x81\xb1'='!'; '\xef\x80\x8d'='x'; '\xef\x81\x9a'='i'; '\xef\x84\x8c'='o' }
 foreach ($key in $icons.Keys) { $panel = $panel.Replace($key, $icons[$key]) }
+$panel = $panel.Replace('{"none", "game", "UI assist"}', '{"None", "Game", "UI assist"}')
+$panel = $panel.Replace('{"off", "on", "on (forced)"}', '{"Off", "On", "On (forced)"}')
+$panel = $panel.Replace('*fallback ? "on" : "off"', '*fallback ? "On" : "Off"')
 $panel = $panel.Replace('ImVec2(0, 0), ImGuiChildFlags_AlwaysUseWindowPadding', 'ImVec2(680, 560), ImGuiChildFlags_AlwaysUseWindowPadding')
 $entries = [Collections.Specialized.OrderedDictionary]::new([StringComparer]::Ordinal)
 foreach ($line in [IO.File]::ReadAllLines((Join-Path $source 'menu.zh-CN.txt'), $utf8)) {
