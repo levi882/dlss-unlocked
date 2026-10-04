@@ -1,0 +1,22 @@
+DLSS Unlocked RTX 20 / 30 FP16 简体中文菜单版
+
+包含你提供的 plain FP16 DLSSNR 310.8 运行库、dlssg_for_sm86 v0.3.5-5，
+以及 OptiScaler 0.9.33 游戏内简体中文菜单。RTX 20 支持属于实验性。
+帧生成控制直接使用 OptiScaler 菜单。默认保留上游的帧生成设置，
+不强制开启神经渲染；可在游戏内菜单按需开启、保存设置并重启游戏。
+
+安装程序：关闭游戏并备份现有文件，运行 setup，选择游戏的渲染 EXE 目录。
+手动安装：关闭游戏并备份现有文件，把压缩包内容解压到渲染 EXE 所在目录。
+已存在其他图形插件时，先确认代理 DLL 的名称与用途，再进行替换。
+菜单默认快捷键以 OptiScaler.ini 中的设置为准。
+
+主代理为根目录 dxgi.dll；dlssg_sm86.dll 位于 OptiScaler/dlssg_sm86/，
+由 OptiScaler 加载，不需要再把 dlssg_for_sm86 的 version.dll 放在游戏根目录。
+两处 nvngx_dlssnr.dll 均为 FP16 版本：游戏根目录和 OptiScaler/streamline/。
+各组件来源、版本和 SHA256 见 Licenses/RTX20-30-FP16-manifest.json。
+
+帧生成需要游戏提供相应 NVIDIA DLSS Frame Generation 接口，
+实际倍率取决于游戏、显卡和驱动。该整合包尚未进行实际游戏验证。
+中文字体从 Windows 系统读取；没有支持中文字形的系统字体时回退英文。
+
+卸载或回退：关闭游戏，恢复安装前的备份。

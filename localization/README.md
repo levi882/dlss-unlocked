@@ -1,5 +1,12 @@
 # OptiScaler 游戏内菜单汉化
 
+RTX 20/30 FP16 专版通过 `package-release.ps1 -Rtx2030BundleZip` 整合用户提供的
+`nvngx_dlssnr_plainfp16.zip` 和 `dlssg_for_sm86` v0.3.5-5。两处 NR 运行库使用同一
+FP16 文件；帧生成模块放在 `OptiScaler/dlssg_sm86/`，由 OptiScaler 加载和控制。
+完整包沿用此处的简体中文菜单，提供安装程序和手动安装包；专版构建流程为
+`.github/workflows/release-menu-zh.yml（独立发布分支）`。组件来源和校验值随包提供，RTX 20 支持为实验性，
+该整合包尚未进行游戏实测。详细使用方式见 `INSTALL-RTX20-30.zh-CN.txt`。
+
 此目录只处理游戏内菜单，安装器和原有文档保持原样。
 
 基于 `ShyVortex/OptiScaler-DLSSNR-PreSR-Multipass` 的 **0.9.33**，

@@ -1,11 +1,14 @@
 param(
     [Parameter(Mandatory = $true)][string]$UpstreamZip,
     [Parameter(Mandatory = $true)][string]$MenuPatchZip,
+    [string]$Rtx2030BundleZip = '',
     [string]$ISCCPath = '',
     [string]$TagName = 'NR-v0.9.33-zh-CN'
 )
 $ErrorActionPreference = 'Stop'
-if ($TagName -notmatch '^NR-v0\.9\.33-zh-CN(?:\.[0-9]+)?$') { throw 'Unsupported release tag' }
+if ($TagName -notmatch '^NR-v0\.9\.33-(?:RTX20-30-FP16-)?zh-CN(?:\.[0-9]+)?$') { throw 'Unsupported release tag' }
+$isRtx2030 = $TagName -match '-RTX20-30-FP16-'
+if ($isRtx2030 -ne [bool]$Rtx2030BundleZip) { throw 'The RTX 20/30 release requires its matching component bundle' }
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $UpstreamZip = [IO.Path]::GetFullPath($UpstreamZip)
 $MenuPatchZip = [IO.Path]::GetFullPath($MenuPatchZip)
@@ -33,6 +36,53 @@ Get-ChildItem -LiteralPath $payload -Recurse -File | ForEach-Object {
     $before[$relative] = (Get-FileHash -LiteralPath $_.FullName).Hash
 }
 Copy-Item -LiteralPath $menuDll -Destination (Join-Path $payload 'dxgi.dll') -Force
+$expectedFiles = @{} + $before
+$expectedFiles['dxgi.dll'] = $manifest.Sha256
+if ($isRtx2030) {
+    $components = Join-Path $work 'components'
+    Expand-Archive -LiteralPath ([IO.Path]::GetFullPath($Rtx2030BundleZip)) -DestinationPath $components
+    $componentManifest = Get-Content -LiteralPath (Join-Path $components 'manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($componentManifest.Profile -ne 'RTX20-30-FP16' -or $componentManifest.DlssgCommit -ne '329b4c85927c64a8dba2e25125e6d02a42ab63fe') { throw 'Unexpected RTX 20/30 component provenance' }
+    $fp16Hash = '6DAC1B40F0C87AF84A8177B18C741E84FB0C914F204C9D87D95916B665BA3AF8'
+    $dlssgHash = '7489A89BF593CDA243D95C62E6D8B75905D9774E27B7B2D53B91625A79C05CA4'
+    if ((Get-FileHash -LiteralPath (Join-Path $components 'nvngx_dlssnr.dll')).Hash -ne $fp16Hash) { throw 'Supplied FP16 runtime SHA256 mismatch' }
+    if ((Get-FileHash -LiteralPath (Join-Path $components 'dlssg_sm86\dlssg_sm86.dll')).Hash -ne $dlssgHash) { throw 'Supplied DLSSG runtime SHA256 mismatch' }
+    foreach ($property in $componentManifest.Files.PSObject.Properties) {
+        $relative = $property.Name.Replace('/', '\')
+        $sourceFile = [IO.Path]::GetFullPath((Join-Path $components $relative))
+        if (!$sourceFile.StartsWith($components + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid component path' }
+        if ((Get-FileHash -LiteralPath $sourceFile).Hash -ne $property.Value) { throw "Component SHA256 mismatch: $relative" }
+    }
+    foreach ($relative in @('nvngx_dlssnr.dll', 'OptiScaler\streamline\nvngx_dlssnr.dll')) {
+        Copy-Item -LiteralPath (Join-Path $components 'nvngx_dlssnr.dll') -Destination (Join-Path $payload $relative) -Force
+        $expectedFiles[$relative] = $fp16Hash
+    }
+    $moduleSource = Join-Path $components 'dlssg_sm86'
+    Get-ChildItem -LiteralPath $moduleSource -File -Force | ForEach-Object {
+        $relative = 'OptiScaler\dlssg_sm86\' + $_.Name
+        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $payload $relative) -Force
+        $expectedFiles[$relative] = (Get-FileHash -LiteralPath $_.FullName).Hash
+    }
+    $checksums = Join-Path $payload 'OptiScaler\dlssg_sm86\checksums.sha256'
+    $hashLines = Get-ChildItem -LiteralPath $moduleSource -File -Force | Sort-Object Name | ForEach-Object { ((Get-FileHash -LiteralPath $_.FullName).Hash.ToLowerInvariant()) + '  ' + $_.Name }
+    [IO.File]::WriteAllText($checksums, ($hashLines -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
+    $expectedFiles['OptiScaler\dlssg_sm86\checksums.sha256'] = (Get-FileHash -LiteralPath $checksums).Hash
+    $notices = 'Licenses\dlssg_sm86_THIRD_PARTY_NOTICES.txt'
+    Copy-Item -LiteralPath (Join-Path $moduleSource 'THIRD_PARTY_NOTICES.txt') -Destination (Join-Path $payload $notices) -Force
+    $expectedFiles[$notices] = (Get-FileHash -LiteralPath (Join-Path $payload $notices)).Hash
+    $profileManifest = 'Licenses\RTX20-30-FP16-manifest.json'
+    Copy-Item -LiteralPath (Join-Path $components 'manifest.json') -Destination (Join-Path $payload $profileManifest) -Force
+    $expectedFiles[$profileManifest] = (Get-FileHash -LiteralPath (Join-Path $payload $profileManifest)).Hash
+    $installGuide = 'INSTALL-RTX20-30.zh-CN.txt'
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot $installGuide) -Destination (Join-Path $payload $installGuide) -Force
+    $expectedFiles[$installGuide] = (Get-FileHash -LiteralPath (Join-Path $payload $installGuide)).Hash
+
+    # Both specialized packages start with the same single NVIDIA FG provider.
+    $ini = Get-Content -LiteralPath (Join-Path $payload 'OptiScaler.ini') -Raw -Encoding UTF8
+    foreach ($key in @('External=true', 'AmpereMfgUnlock=true', 'AdaMfgUnlock=false')) {
+        if ($ini -notmatch ('(?m)^' + [regex]::Escape($key) + '\r?$')) { throw "Required RTX 20/30 default is missing: $key" }
+    }
+}
 $output = Join-Path $projectRoot 'Output'
 New-Item -ItemType Directory -Path $output -Force | Out-Null
 $zipPath = Join-Path $output "dlss-unlocked-standalone-$TagName.zip"
@@ -46,8 +96,8 @@ try {
     foreach ($entry in $archive.Entries) {
         if (!$entry.Name) { continue }
         $relative = $entry.FullName.Replace('/', '\')
-        if (!$before.ContainsKey($relative)) { throw "Unexpected archive entry: $relative" }
-        $expected = if ($relative -eq 'dxgi.dll') { $manifest.Sha256 } else { $before[$relative] }
+        if (!$expectedFiles.ContainsKey($relative)) { throw "Unexpected archive entry: $relative" }
+        $expected = $expectedFiles[$relative]
         $stream = $entry.Open()
         $sha = [Security.Cryptography.SHA256]::Create()
         try { $actual = ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '') }
@@ -56,8 +106,9 @@ try {
         $checked++
     }
 } finally { $archive.Dispose() }
-if ($checked -ne $before.Count) { throw 'The standalone archive is missing upstream files' }
-Write-Output "Verified $checked packaged files; only dxgi.dll changed."
+if ($checked -ne $expectedFiles.Count) { throw 'The standalone archive is missing required files' }
+if ($isRtx2030) { Write-Output "Verified $checked packaged files, supplied FP16 runtimes, supplied DLSSG module and Chinese menu. Other upstream files are unchanged." }
+else { Write-Output "Verified $checked packaged files; only dxgi.dll changed." }
 
 if ($ISCCPath) {
     # Retain the upstream wizard, proxy choices and configuration code. Package
