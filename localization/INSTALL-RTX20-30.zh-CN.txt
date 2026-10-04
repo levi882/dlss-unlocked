@@ -1,22 +1,30 @@
-DLSS Unlocked RTX 20 / 30 FP16 简体中文菜单版
+﻿DLSS Unlocked RTX 20 / 30 FP16 简体中文菜单版
 
-包含你提供的 plain FP16 DLSSNR 310.8 运行库、dlssg_for_sm86 v0.3.5-5，
-以及 OptiScaler 0.9.33 游戏内简体中文菜单。RTX 20 支持属于实验性。
-帧生成控制直接使用 OptiScaler 菜单。默认保留上游的帧生成设置，
-不强制开启神经渲染；可在游戏内菜单按需开启、保存设置并重启游戏。
+包含 plain FP16 DLSSNR 310.8、作者发布的 DLSSG-Transfusion 1.4.5.3 优化核心，
+以及 OptiScaler 0.9.33 中文菜单。RTX 20 支持为实验性，整合包尚未进行游戏实测。
 
-安装程序：关闭游戏并备份现有文件，运行 setup，选择游戏的渲染 EXE 目录。
-手动安装：关闭游戏并备份现有文件，把压缩包内容解压到渲染 EXE 所在目录。
-已存在其他图形插件时，先确认代理 DLL 的名称与用途，再进行替换。
-菜单默认快捷键以 OptiScaler.ini 中的设置为准。
+关闭游戏并备份当前文件，再运行安装程序或将整个 ZIP 解压到游戏渲染 EXE 目录。
+菜单快捷键以 OptiScaler.ini 为准。超分辨率和 NR 设置在 OptiScaler 页；
+新版帧生成设置在“Transfusion 帧生成”页，无需另装 ReShade。
+设置会立即保存，标有“需重启”的选项应重启游戏；快捷键需点击“保存快捷键”。
+游戏需提供 NVIDIA DLSS Frame Generation 接口，并在游戏内开启帧生成。
+默认“由游戏决定”，可切换固定倍率或动态倍率；5/6 倍为实验性功能。
+NR 默认不强制开启，可在原页面按需启用。
 
-主代理为根目录 dxgi.dll；dlssg_sm86.dll 位于 OptiScaler/dlssg_sm86/，
-由 OptiScaler 加载，不需要再把 dlssg_for_sm86 的 version.dll 放在游戏根目录。
-两处 nvngx_dlssnr.dll 均为 FP16 版本：游戏根目录和 OptiScaler/streamline/。
-各组件来源、版本和 SHA256 见 Licenses/RTX20-30-FP16-manifest.json。
+核心位于 OptiScaler/plugins/DLSSG-Transfusion.asi，同目录保存 DLSSG-Transfusion.json。
+默认 External=true、LoadAsiPlugins=true；Plugins/Path 保持 auto。
+旧 AmpereMfgUnlock、AdaMfgUnlock、SmoothMotion 和 EnableNVSmooth30 均关闭。
+不要重新开启旧开关，也不要同时放入旧 dlssg_for_sm86 入口 DLL 或其他帧生成代理。
+新版 Smooth Motion 在 Transfusion 页，默认为关闭；仅 RTX 30 实验性支持，
+作者仅验证 NVIDIA 617.14。使用前关闭游戏内 DLSS 帧生成，并重启游戏。
 
-帧生成需要游戏提供相应 NVIDIA DLSS Frame Generation 接口，
-实际倍率取决于游戏、显卡和驱动。该整合包尚未进行实际游戏验证。
-中文字体从 Windows 系统读取；没有支持中文字形的系统字体时回退英文。
+根目录 dxgi.dll 为 OptiScaler；安装器也提供 version/winmm/ASI 入口选择。
+已有其他图形插件时，请核实代理名称后替换。手动更新须同时覆盖 OptiScaler.ini；
+仅覆盖 DLL 会遗留旧开关。旧模块可保留作回退，关闭旧开关后不会被 OptiScaler 加载。
+两处 nvngx_dlssnr.dll 均为 FP16：根目录和 OptiScaler/streamline/。
+来源和校验值见 Licenses/RTX20-30-FP16-manifest.json。
+面板适配源码见 Licenses/OptiScaler-Transfusion-SourcePatch.zip。
+中文字体从 Windows 系统读取，缺少中文字体时回退英文。
 
-卸载或回退：关闭游戏，恢复安装前的备份。
+回退：关闭游戏，移出新增的 OptiScaler/plugins/DLSSG-Transfusion.asi
+及同目录配置文件，再恢复旧安装包或安装前备份。40 系版本另行适配。

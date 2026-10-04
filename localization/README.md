@@ -1,11 +1,21 @@
-# OptiScaler 游戏内菜单汉化
+﻿# OptiScaler 游戏内菜单汉化
 
-RTX 20/30 FP16 专版通过 `package-release.ps1 -Rtx2030BundleZip` 整合用户提供的
-`nvngx_dlssnr_plainfp16.zip` 和 `dlssg_for_sm86` v0.3.5-5。两处 NR 运行库使用同一
-FP16 文件；帧生成模块放在 `OptiScaler/dlssg_sm86/`，由 OptiScaler 加载和控制。
-完整包沿用此处的简体中文菜单，提供安装程序和手动安装包；专版构建流程为
-`.github/workflows/release-menu-zh.yml（独立发布分支）`。组件来源和校验值随包提供，RTX 20 支持为实验性，
-该整合包尚未进行游戏实测。详细使用方式见 `INSTALL-RTX20-30.zh-CN.txt`。
+RTX 20/30 FP16 专版已迁移至作者发布的 DLSSG-Transfusion 1.4.5.3 优化 ASI 核心，
+替代 dlssg_for_sm86。两处 NR 继续使用用户提供的 plain FP16 运行库。
+Transfusion 面板移植自固定提交 b56bd2deed114507ad2c88f986d90ed50ffb4639，
+直接接入 OptiScaler 的“Transfusion 帧生成”页，使用同一 ImGui 和系统中文字体，
+无需 ReShade。JSON 配置键、模式值及热重载协议保留上游定义。
+源面板及 MIT 许可在 transfusion/；适配脚本 apply-transfusion.ps1。
+核心二进制使用官方 Release，保留作者未公开的优化内核。
+
+构建此专版时增加 build-menu-zh.ps1 -TransfusionProfile；菜单产物为
+Output/OptiScaler-0.9.33-Transfusion-zh-CN.zip。
+用 build-transfusion-components.ps1 验证官方 ZIP 和 FP16 文件并生成组件输入。
+package-release.ps1 负责核对哈希、配置、完整 ZIP 和安装器内容，CI 仅上传候选稿；
+校验后再替换原发布附件。普通汉化发布页不受此次更新影响。
+RTX 20 为实验性，尚未完成实际游戏验证。使用方式见 INSTALL-RTX20-30.zh-CN.txt。
+transfusion_ui_check.cpp 使用真实移植面板验证模式渲染、鼠标点击保存、原始 JSON 键、
+注释保留、快捷键释放，以及所有译文的字形。
 
 此目录只处理游戏内菜单，安装器和原有文档保持原样。
 

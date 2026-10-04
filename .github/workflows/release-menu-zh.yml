@@ -1,36 +1,33 @@
-name: Publish RTX 20-30 FP16 Chinese release
-
+name: Build RTX 20-30 Transfusion Chinese release
 on:
   workflow_dispatch:
     inputs:
-      tag_name:
-        description: Draft release containing the validated Chinese menu and RTX 20/30 components
+      build_tag:
+        description: Draft release holding validated build inputs and candidate outputs
         required: true
-        default: NR-v0.9.33-RTX20-30-FP16-zh-CN
-
+        default: NR-v0.9.33-RTX20-30-Transfusion-build-20261004
 permissions:
   contents: write
-
 concurrency:
-  group: rtx20-30-release-${{ inputs.tag_name }}
+  group: rtx20-30-transfusion-release
   cancel-in-progress: false
-
 jobs:
   package:
     runs-on: windows-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      RELEASE_TAG: ${{ inputs.tag_name }}
+      BUILD_TAG: ${{ inputs.build_tag }}
+      RELEASE_TAG: NR-v0.9.33-RTX20-30-FP16-zh-CN
     steps:
       - uses: actions/checkout@v4
-      - name: Download pinned upstream package and supplied components
+      - name: Download pinned upstream package and validated inputs
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path temp_optiscaler/release-input -Force | Out-Null
           gh release download NR-v0.9.33 --repo ShyVortex/dlss-unlocked --pattern dlss-unlocked-standalone-NR-v0.9.33.zip --dir temp_optiscaler/release-input
           if ($LASTEXITCODE -ne 0) { throw 'Upstream download failed' }
-          foreach ($asset in @('OptiScaler-0.9.33-zh-CN.zip', 'RTX20-30-FP16-components.zip')) {
-            gh release download $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern $asset --dir temp_optiscaler/release-input
+          foreach ($asset in @('OptiScaler-0.9.33-Transfusion-zh-CN.zip', 'RTX20-30-FP16-Transfusion-components.zip')) {
+            gh release download $env:BUILD_TAG --repo $env:GITHUB_REPOSITORY --pattern $asset --dir temp_optiscaler/release-input
             if ($LASTEXITCODE -ne 0) { throw "Component download failed: $asset" }
           }
       - name: Install Inno Setup compiler
@@ -38,21 +35,14 @@ jobs:
         run: |
           choco install innosetup --yes --no-progress
           if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
-      - name: Package and verify RTX 20-30 standalone archive and installer
+      - name: Build and verify standalone archive and installer
         shell: pwsh
         run: |
           $compiler = @('C:/Program Files (x86)/Inno Setup 6/ISCC.exe', 'C:/Program Files/Inno Setup 6/ISCC.exe') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
           if (!$compiler) { throw 'Inno Setup compiler not found' }
-          ./localization/package-release.ps1 -UpstreamZip temp_optiscaler/release-input/dlss-unlocked-standalone-NR-v0.9.33.zip -MenuPatchZip temp_optiscaler/release-input/OptiScaler-0.9.33-zh-CN.zip -Rtx2030BundleZip temp_optiscaler/release-input/RTX20-30-FP16-components.zip -ISCCPath $compiler -TagName $env:RELEASE_TAG
-      - name: Publish RTX 20-30 packages
+          ./localization/package-release.ps1 -UpstreamZip temp_optiscaler/release-input/dlss-unlocked-standalone-NR-v0.9.33.zip -MenuPatchZip temp_optiscaler/release-input/OptiScaler-0.9.33-Transfusion-zh-CN.zip -Rtx2030BundleZip temp_optiscaler/release-input/RTX20-30-FP16-Transfusion-components.zip -ISCCPath $compiler -TagName $env:RELEASE_TAG
+      - name: Upload candidates to draft for review before replacement
         shell: pwsh
         run: |
-          gh release upload $env:RELEASE_TAG "Output/dlss-unlocked-setup-$env:RELEASE_TAG.exe" "Output/dlss-unlocked-standalone-$env:RELEASE_TAG.zip" --repo $env:GITHUB_REPOSITORY --clobber
-          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed' }
-          foreach ($asset in @('OptiScaler-0.9.33-zh-CN.zip', 'RTX20-30-FP16-components.zip')) {
-            gh release delete-asset $env:RELEASE_TAG $asset --repo $env:GITHUB_REPOSITORY --yes
-            if ($LASTEXITCODE -ne 0) { throw "Build input cleanup failed: $asset" }
-          }
-          'RTX 20/30 专版：集成 FP16 DLSSNR 和 dlssg_for_sm86 v0.3.5-5，游戏内菜单已汉化为简体中文。RTX 20 支持为实验性。' | Set-Content -LiteralPath release-notes.txt -Encoding utf8
-          gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --title 'DLSS Unlocked v0.9.33 RTX 20/30 FP16 简体中文菜单版' --notes-file release-notes.txt --draft=false --latest=false
-          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
+          gh release upload $env:BUILD_TAG "Output/dlss-unlocked-setup-$env:RELEASE_TAG.exe" "Output/dlss-unlocked-standalone-$env:RELEASE_TAG.zip" --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate upload failed' }

@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)][string]$UpstreamZip,
     [Parameter(Mandatory = $true)][string]$MenuPatchZip,
     [string]$Rtx2030BundleZip = '',
@@ -39,49 +39,59 @@ Copy-Item -LiteralPath $menuDll -Destination (Join-Path $payload 'dxgi.dll') -Fo
 $expectedFiles = @{} + $before
 $expectedFiles['dxgi.dll'] = $manifest.Sha256
 if ($isRtx2030) {
+    if ($manifest.TransfusionCommit -ne 'b56bd2deed114507ad2c88f986d90ed50ffb4639') { throw 'Missing integrated Transfusion panel' }
+    $translation = Join-Path $patch 'SourcePatch/transfusion/menu.zh-CN.txt'
+    if ((Get-FileHash $translation).Hash -ne $manifest.TransfusionTranslationSha256) { throw 'Transfusion translation hash mismatch' }
+    $extraText = (Get-Content $translation -Raw -Encoding UTF8).Replace("`r`n","`n")
+    $repoExtra = (Get-Content (Join-Path $PSScriptRoot 'transfusion/menu.zh-CN.txt') -Raw -Encoding UTF8).Replace("`r`n","`n")
+    if ($extraText -cne $repoExtra) { throw 'Transfusion translation differs from the validated menu build' }
     $components = Join-Path $work 'components'
     Expand-Archive -LiteralPath ([IO.Path]::GetFullPath($Rtx2030BundleZip)) -DestinationPath $components
-    $componentManifest = Get-Content -LiteralPath (Join-Path $components 'manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ($componentManifest.Profile -ne 'RTX20-30-FP16' -or $componentManifest.DlssgCommit -ne '329b4c85927c64a8dba2e25125e6d02a42ab63fe') { throw 'Unexpected RTX 20/30 component provenance' }
-    $fp16Hash = '6DAC1B40F0C87AF84A8177B18C741E84FB0C914F204C9D87D95916B665BA3AF8'
-    $dlssgHash = '7489A89BF593CDA243D95C62E6D8B75905D9774E27B7B2D53B91625A79C05CA4'
-    if ((Get-FileHash -LiteralPath (Join-Path $components 'nvngx_dlssnr.dll')).Hash -ne $fp16Hash) { throw 'Supplied FP16 runtime SHA256 mismatch' }
-    if ((Get-FileHash -LiteralPath (Join-Path $components 'dlssg_sm86\dlssg_sm86.dll')).Hash -ne $dlssgHash) { throw 'Supplied DLSSG runtime SHA256 mismatch' }
+    $componentManifest = Get-Content (Join-Path $components 'manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($componentManifest.Profile -ne 'RTX20-30-FP16-Transfusion' -or $componentManifest.TransfusionCommit -ne 'b56bd2deed114507ad2c88f986d90ed50ffb4639') { throw 'Unexpected component provenance' }
     foreach ($property in $componentManifest.Files.PSObject.Properties) {
         $relative = $property.Name.Replace('/', '\')
         $sourceFile = [IO.Path]::GetFullPath((Join-Path $components $relative))
         if (!$sourceFile.StartsWith($components + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid component path' }
-        if ((Get-FileHash -LiteralPath $sourceFile).Hash -ne $property.Value) { throw "Component SHA256 mismatch: $relative" }
+        if ((Get-FileHash $sourceFile).Hash -ne $property.Value) { throw "Component hash mismatch: $relative" }
+        $target = Join-Path $payload $relative
+        New-Item -ItemType Directory -Path (Split-Path $target -Parent) -Force | Out-Null
+        Copy-Item $sourceFile $target -Force
+        $expectedFiles[$relative] = $property.Value
     }
-    foreach ($relative in @('nvngx_dlssnr.dll', 'OptiScaler\streamline\nvngx_dlssnr.dll')) {
-        Copy-Item -LiteralPath (Join-Path $components 'nvngx_dlssnr.dll') -Destination (Join-Path $payload $relative) -Force
-        $expectedFiles[$relative] = $fp16Hash
+    $fp16Hash = '6DAC1B40F0C87AF84A8177B18C741E84FB0C914F204C9D87D95916B665BA3AF8'
+    if ($expectedFiles['nvngx_dlssnr.dll'] -ne $fp16Hash) { throw 'FP16 runtime mismatch' }
+    if ($expectedFiles['OptiScaler\plugins\DLSSG-Transfusion.asi'] -ne '1EE608B923F94B9DFEB01D6CEDF7F7BB561E281F8BD92DB6549745493BA5771D') { throw 'Official optimized core mismatch' }
+    Copy-Item (Join-Path $components 'nvngx_dlssnr.dll') (Join-Path $payload 'OptiScaler/streamline/nvngx_dlssnr.dll') -Force
+    $expectedFiles['OptiScaler\streamline\nvngx_dlssnr.dll'] = $fp16Hash
+    # Remove only known legacy runtimes from the fresh build staging directory.
+    foreach ($relative in @($before.Keys)) {
+        if ($relative -like 'OptiScaler\dlssg_sm86\*' -or $relative -eq 'OptiScaler\nvsmooth30.dll') {
+            Remove-Item -LiteralPath (Join-Path $payload $relative) -Force
+            $expectedFiles.Remove($relative)
+        }
     }
-    $moduleSource = Join-Path $components 'dlssg_sm86'
-    Get-ChildItem -LiteralPath $moduleSource -File -Force | ForEach-Object {
-        $relative = 'OptiScaler\dlssg_sm86\' + $_.Name
-        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $payload $relative) -Force
-        $expectedFiles[$relative] = (Get-FileHash -LiteralPath $_.FullName).Hash
+    foreach ($pair in @(
+        @('manifest.json','Licenses/RTX20-30-FP16-manifest.json'),
+        @('SOURCE-PATCH','Licenses/OptiScaler-Transfusion-SourcePatch.zip')
+    )) {
+        $target = Join-Path $payload $pair[1]
+        if ($pair[0] -eq 'SOURCE-PATCH') { Compress-Archive -Path (Join-Path $patch 'SourcePatch/*') -DestinationPath $target }
+        else { Copy-Item (Join-Path $components $pair[0]) $target }
+        $expectedFiles[$pair[1].Replace('/','\')] = (Get-FileHash $target).Hash
     }
-    $checksums = Join-Path $payload 'OptiScaler\dlssg_sm86\checksums.sha256'
-    $hashLines = Get-ChildItem -LiteralPath $moduleSource -File -Force | Sort-Object Name | ForEach-Object { ((Get-FileHash -LiteralPath $_.FullName).Hash.ToLowerInvariant()) + '  ' + $_.Name }
-    [IO.File]::WriteAllText($checksums, ($hashLines -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
-    $expectedFiles['OptiScaler\dlssg_sm86\checksums.sha256'] = (Get-FileHash -LiteralPath $checksums).Hash
-    $notices = 'Licenses\dlssg_sm86_THIRD_PARTY_NOTICES.txt'
-    Copy-Item -LiteralPath (Join-Path $moduleSource 'THIRD_PARTY_NOTICES.txt') -Destination (Join-Path $payload $notices) -Force
-    $expectedFiles[$notices] = (Get-FileHash -LiteralPath (Join-Path $payload $notices)).Hash
-    $profileManifest = 'Licenses\RTX20-30-FP16-manifest.json'
-    Copy-Item -LiteralPath (Join-Path $components 'manifest.json') -Destination (Join-Path $payload $profileManifest) -Force
-    $expectedFiles[$profileManifest] = (Get-FileHash -LiteralPath (Join-Path $payload $profileManifest)).Hash
     $installGuide = 'INSTALL-RTX20-30.zh-CN.txt'
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot $installGuide) -Destination (Join-Path $payload $installGuide) -Force
-    $expectedFiles[$installGuide] = (Get-FileHash -LiteralPath (Join-Path $payload $installGuide)).Hash
-
-    # Both specialized packages start with the same single NVIDIA FG provider.
-    $ini = Get-Content -LiteralPath (Join-Path $payload 'OptiScaler.ini') -Raw -Encoding UTF8
-    foreach ($key in @('External=true', 'AmpereMfgUnlock=true', 'AdaMfgUnlock=false')) {
-        if ($ini -notmatch ('(?m)^' + [regex]::Escape($key) + '\r?$')) { throw "Required RTX 20/30 default is missing: $key" }
+    Copy-Item (Join-Path $PSScriptRoot $installGuide) (Join-Path $payload $installGuide)
+    $expectedFiles[$installGuide] = (Get-FileHash (Join-Path $payload $installGuide)).Hash
+    $iniPath = Join-Path $payload 'OptiScaler.ini'
+    $ini = Get-Content $iniPath -Raw -Encoding UTF8
+    foreach ($pair in @(@('AmpereMfgUnlock','false'), @('AdaMfgUnlock','false'), @('SmoothMotion','false'), @('External','true'), @('LoadAsiPlugins','true'))) {
+        if ($ini -notmatch ('(?m)^'+$pair[0]+'=.*$')) { throw "INI key missing: $($pair[0])" }
+        $ini = [regex]::Replace($ini,'(?m)^'+$pair[0]+'=[^\r\n]*',$pair[0]+'='+$pair[1])
     }
+    $ini += "`r`n[SmoothMotion]`r`nEnableNVSmooth30=false`r`n"
+    [IO.File]::WriteAllText($iniPath, $ini, [Text.UTF8Encoding]::new($false))
+    $expectedFiles['OptiScaler.ini'] = (Get-FileHash $iniPath).Hash
 }
 $output = Join-Path $projectRoot 'Output'
 New-Item -ItemType Directory -Path $output -Force | Out-Null
@@ -107,7 +117,7 @@ try {
     }
 } finally { $archive.Dispose() }
 if ($checked -ne $expectedFiles.Count) { throw 'The standalone archive is missing required files' }
-if ($isRtx2030) { Write-Output "Verified $checked packaged files, supplied FP16 runtimes, supplied DLSSG module and Chinese menu. Other upstream files are unchanged." }
+if ($isRtx2030) { Write-Output "Verified $checked packaged files, supplied FP16 runtimes, official optimized Transfusion ASI and integrated panel and Chinese menu. Other upstream files are unchanged." }
 else { Write-Output "Verified $checked packaged files; only dxgi.dll changed." }
 
 if ($ISCCPath) {
@@ -138,6 +148,7 @@ if ($ISCCPath) {
     $template = $template.Replace('#define MyAppVersion "1.0.0.0"', '#define MyAppVersion "0.9.33"')
     $template = $template.Replace('LicenseFile=DLSS for NVIDIA - License.rtf', 'LicenseFile=' + (Join-Path $projectRoot 'DLSS for NVIDIA - License.rtf'))
     $template = $template.Replace('InfoBeforeFile=DLSS Unlocked Intro.rtf', 'InfoBeforeFile=' + (Join-Path $projectRoot 'DLSS Unlocked Intro.rtf'))
+    if ($isRtx2030) { $template = $template.Replace('AmpereMfgUnlock=true','AmpereMfgUnlock=false') }
     $installerScript = Join-Path $work 'DLSS unlocked zh-CN.iss'
     [IO.File]::WriteAllText($installerScript, $template, [Text.UTF8Encoding]::new($true))
     & $ISCCPath "/O$output" "/Fdlss-unlocked-setup-$TagName" $installerScript
