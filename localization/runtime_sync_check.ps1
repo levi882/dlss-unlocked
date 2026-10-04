@@ -128,6 +128,24 @@ InvokeMode $render 'Restore'
 foreach($name in $names|Where-Object {$_ -ne 'sl.pcl.dll'}){Assert ((Hash (Join-Path $engine $name)) -eq (Hash (Join-Path $LegacySource $name))) "UE restore failed: $name"}
 Write-Host 'PASS: Unreal Engine sibling plugin directory discovery and restore'
 
+$game=Fixture 'linked-backups'
+$external=Join-Path $work 'external-backups'
+New-Item -ItemType Directory -Path $external|Out-Null
+New-Item -ItemType Junction -Path (Join-Path $game 'OptiScaler/RuntimeSync/state') -Target $external|Out-Null
+InvokeMode $game 'Sync' 4
+Original $game
+Assert (!(Get-ChildItem $external -Force)) 'Linked backup directory modified'
+Write-Host 'PASS: linked backup directory rejected before modifications'
+
+$game=Fixture 'linked-dependency'
+New-Item -ItemType Junction -Path (Join-Path $game 'sl.pcl.dll') -Target $external|Out-Null
+InvokeMode $game 'Sync' 4
+foreach($name in $names|Where-Object {$_ -ne 'sl.pcl.dll'}){
+    Assert ((Hash (Join-Path $game $name)) -eq (Hash (Join-Path $LegacySource $name))) "Linked dependency partially updated: $name"
+}
+Assert (!(Get-ChildItem $external -Force)) 'Linked dependency target modified'
+Write-Host 'PASS: linked dependency target rejected before modifications'
+
 $game=Fixture 'running-process'
 $exe=Join-Path $game 'RuntimeSyncTest.exe'
 Copy-Item "$env:SystemRoot/System32/cmd.exe" $exe

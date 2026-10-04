@@ -11,6 +11,18 @@ $allowed=@('nvngx_dlssg.dll','sl.interposer.dll','sl.common.dll','sl.dlss.dll','
 function HashFile([string]$Path){return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash}
 function FullPath([string]$Path){return [IO.Path]::GetFullPath($Path).TrimEnd('\')}
 function Within([string]$Path,[string]$Root){return (FullPath $Path).StartsWith((FullPath $Root)+'\',[StringComparison]::OrdinalIgnoreCase)}
+function HasLink([string]$Path,[string]$Root){
+    $cursor=FullPath $Path;$boundary=FullPath $Root
+    while($cursor -ne $boundary){
+        if(Test-Path -LiteralPath $cursor){
+            if((Get-Item -LiteralPath $cursor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint){return $true}
+        }
+        $parent=Split-Path $cursor -Parent
+        if(!$parent -or $parent -eq $cursor){throw '路径不在预期的游戏目录内。'}
+        $cursor=$parent
+    }
+    return $false
+}
 function Say([string]$Text){Write-Host $Text}
 function SaveJson($Value,[string]$Path){
     $temporary=$Path+'.tmp'
@@ -45,6 +57,9 @@ function FindTargets([string]$Root){
 function GameRunning([string]$Root){
     foreach($process in @(Get-Process)){
         try{$path=$process.Path}catch{continue}
+        # Inno leaves its original launcher alive while its temporary copy restores files.
+        if($Mode -eq 'Restore' -and $path -and (Split-Path $path -Parent) -eq $installRoot -and
+           [IO.Path]::GetFileName($path) -match '^unins\d{3}\.exe$'){continue}
         if($path -and (Within $path $Root)){return $true}
     }
     return $false
@@ -56,6 +71,9 @@ function ValidateEntry($Entry){
     }
     if($Entry.OriginalExists -and (!(Within $Entry.Backup $stateDir) -or !(Test-Path -LiteralPath $Entry.Backup -PathType Leaf))){
         throw '恢复备份丢失或路径无效，未修改文件。'
+    }
+    if((HasLink $Entry.Target $scanRoot) -or ($Entry.OriginalExists -and (HasLink $Entry.Backup $installRoot))){
+        throw '恢复路径含有链接，未修改文件。'
     }
 }
 function Main {
@@ -73,6 +91,7 @@ function Main {
     }
     $script:stateDir=Join-Path $optiDir 'RuntimeSync\state'
     $statePath=Join-Path $stateDir 'manifest.json'
+    if(HasLink $stateDir $installRoot){throw '备份目录含有链接，未修改文件。'}
     if($LogPath){
         $safeLog=FullPath $LogPath
         if(!(Within $safeLog (Join-Path $optiDir 'RuntimeSync'))){throw '日志路径无效。'}
@@ -143,6 +162,7 @@ function Main {
     $changes=[Collections.Generic.List[object]]::new();$correct=0
     foreach($target in $targets){
         if(!(Within $target $scanRoot) -or (Within $target $optiDir)){throw '同步目标超出游戏范围。'}
+        if(HasLink $target $scanRoot){throw '同步目标含有链接，未修改文件。'}
         $name=[IO.Path]::GetFileName($target)
         $exists=Test-Path -LiteralPath $target -PathType Leaf
         $hash=if($exists){HashFile $target}else{''}

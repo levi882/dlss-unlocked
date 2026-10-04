@@ -22,6 +22,6 @@ begin
   begin
     Result := RunRuntimeSync('Restore', 'last-restore.log');
     if not Result then
-      MsgBox('Close the game and run Restore again before uninstalling. See OptiScaler\RuntimeSync\last-restore.log.', mbError, MB_OK);
+      SuppressibleMsgBox('Close the game and run Restore again before uninstalling. See OptiScaler\RuntimeSync\last-restore.log.', mbError, MB_OK, IDOK);
   end;
 end;
