@@ -1,9 +1,15 @@
 DLSS Unlocked RTX 40 简体中文菜单版
 
 包含 DLSSG-Transfusion 1.4.5.3 官方优化核心、OptiScaler 0.9.33 中文菜单，
-NR 保留上游 ShortFuse 兼容运行库。此整合包尚未完成实际游戏验证。
+NR 保留上游 ShortFuse 兼容运行库。已在 RTX 4070 Ti 的极限竞速：地平线 5 验证 3 倍帧生成。
 
 关闭游戏并备份当前文件，再运行安装程序或将整个 ZIP 解压到游戏渲染 EXE 目录。
+安装器在选中 Streamline 组件时自动备份并同步游戏原生帧生成运行库。
+ZIP 解压后先运行根目录“同步运行库.cmd”，完成后再启动游戏。
+游戏更新后可运行“检查运行库.cmd”；提示不一致时关闭游戏，再运行同步命令修复。
+同步仅涉及帧生成及配套 Streamline DLL，不替换游戏原生 SR、RR 或 NR。
+Streamline 1.x 或版本不明的原生运行库会整套跳过，游戏运行时禁止同步和恢复。
+游戏目录受系统保护时，用管理员身份运行同步命令。
 默认按 Insert 打开菜单，快捷键以 OptiScaler.ini 为准。
 超分辨率和 NR 设置在 OptiScaler 页；帧生成在“Transfusion 帧生成”页。
 无需另装 ReShade，也无需在 NVIDIA App 设置 DLSS 帧生成倍率。
@@ -27,4 +33,6 @@ Licenses/OptiScaler-Transfusion-SourcePatch.zip。
 中文字体从 Windows 系统读取，缺少中文字体时回退英文。
 
 回退：关闭游戏，移出新增的 OptiScaler/plugins/DLSSG-Transfusion.asi
-及同目录配置文件，再恢复安装前备份或旧安装包。
+及同目录配置文件，再运行“恢复运行库.cmd”并恢复安装前备份或旧安装包。
+卸载器会先尝试恢复运行库；备份保存在 OptiScaler/RuntimeSync/state/，请保留。
+恢复只处理仍与本工具部署版本一致的文件，保留已被游戏更新或其他工具修改的文件。

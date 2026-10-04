@@ -1,23 +1,28 @@
-﻿name: Build RTX40 Transfusion Chinese release
+name: Build RTX20-30 and RTX40 Chinese runtime-sync releases
 on:
   workflow_dispatch:
     inputs:
       build_tag:
         description: Draft release holding validated build inputs and candidate outputs
         required: true
-        default: NR-v0.9.33-RTX40-zh-CN
+        default: NR-v0.9.33-runtime-sync-build-20261004
 permissions:
   contents: write
 concurrency:
-  group: rtx40-transfusion-release
+  group: runtime-sync-transfusion-release
   cancel-in-progress: false
 jobs:
   package:
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [RTX20-30-FP16, RTX40]
     runs-on: windows-latest
     env:
       GH_TOKEN: ${{ github.token }}
       BUILD_TAG: ${{ inputs.build_tag }}
-      RELEASE_TAG: NR-v0.9.33-RTX40-zh-CN
+      PROFILE: ${{ matrix.profile }}
+      RELEASE_TAG: NR-v0.9.33-${{ matrix.profile }}-zh-CN
     steps:
       - uses: actions/checkout@v4
       - name: Download pinned upstream package and validated inputs
@@ -26,7 +31,8 @@ jobs:
           New-Item -ItemType Directory -Path temp_optiscaler/release-input -Force | Out-Null
           gh release download NR-v0.9.33 --repo ShyVortex/dlss-unlocked --pattern dlss-unlocked-standalone-NR-v0.9.33.zip --dir temp_optiscaler/release-input
           if ($LASTEXITCODE -ne 0) { throw 'Upstream download failed' }
-          foreach ($asset in @('OptiScaler-0.9.33-Transfusion-zh-CN.zip', 'RTX40-Transfusion-components.zip')) {
+          $component = if ($env:PROFILE -eq 'RTX40') { 'RTX40-Transfusion-components.zip' } else { 'RTX20-30-FP16-Transfusion-components.zip' }
+          foreach ($asset in @('OptiScaler-0.9.33-Transfusion-zh-CN.zip', $component)) {
             gh release download $env:BUILD_TAG --repo $env:GITHUB_REPOSITORY --pattern $asset --dir temp_optiscaler/release-input
             if ($LASTEXITCODE -ne 0) { throw "Component download failed: $asset" }
           }
@@ -40,7 +46,8 @@ jobs:
         run: |
           $compiler = @('C:/Program Files (x86)/Inno Setup 6/ISCC.exe', 'C:/Program Files/Inno Setup 6/ISCC.exe') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
           if (!$compiler) { throw 'Inno Setup compiler not found' }
-          ./localization/package-release.ps1 -UpstreamZip temp_optiscaler/release-input/dlss-unlocked-standalone-NR-v0.9.33.zip -MenuPatchZip temp_optiscaler/release-input/OptiScaler-0.9.33-Transfusion-zh-CN.zip -Rtx40BundleZip temp_optiscaler/release-input/RTX40-Transfusion-components.zip -ISCCPath $compiler -TagName $env:RELEASE_TAG
+          $bundle = if ($env:PROFILE -eq 'RTX40') { @{Rtx40BundleZip='temp_optiscaler/release-input/RTX40-Transfusion-components.zip'} } else { @{Rtx2030BundleZip='temp_optiscaler/release-input/RTX20-30-FP16-Transfusion-components.zip'} }
+          ./localization/package-release.ps1 -UpstreamZip temp_optiscaler/release-input/dlss-unlocked-standalone-NR-v0.9.33.zip -MenuPatchZip temp_optiscaler/release-input/OptiScaler-0.9.33-Transfusion-zh-CN.zip @bundle -ISCCPath $compiler -TagName $env:RELEASE_TAG
       - name: Upload candidates to draft for review before replacement
         shell: pwsh
         run: |

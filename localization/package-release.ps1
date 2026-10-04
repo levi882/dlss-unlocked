@@ -97,6 +97,20 @@ if ($isTransfusion) {
     $installGuide = if ($isRtx40) { 'INSTALL-RTX40.zh-CN.txt' } else { 'INSTALL-RTX20-30.zh-CN.txt' }
     Copy-Item (Join-Path $PSScriptRoot $installGuide) (Join-Path $payload $installGuide)
     $expectedFiles[$installGuide] = (Get-FileHash (Join-Path $payload $installGuide)).Hash
+    foreach ($helper in Get-ChildItem (Join-Path $PSScriptRoot 'runtime-sync') -File | Where-Object { $_.Extension -in @('.ps1','.cmd') }) {
+        Copy-Item -LiteralPath $helper.FullName -Destination (Join-Path $payload $helper.Name)
+        $expectedFiles[$helper.Name] = (Get-FileHash $helper.FullName).Hash
+    }
+    $runtimeNames = @('nvngx_dlssg.dll','sl.interposer.dll','sl.common.dll','sl.dlss.dll','sl.dlss_g.dll','sl.nis.dll','sl.reflex.dll','sl.pcl.dll')
+    $runtimePolicy = [ordered]@{Schema=1;Profile=$profile;Files=@($runtimeNames | ForEach-Object {
+        $source = "OptiScaler/streamline/$_"
+        $file = Get-Item -LiteralPath (Join-Path $payload $source)
+        [ordered]@{Name=$_;Source=$source;Sha256=(Get-FileHash $file.FullName).Hash;Version=$file.VersionInfo.FileVersion}
+    })}
+    $policyPath = Join-Path $payload 'OptiScaler/RuntimeSync/runtimes.json'
+    New-Item -ItemType Directory -Path (Split-Path $policyPath -Parent) -Force | Out-Null
+    [IO.File]::WriteAllText($policyPath, ($runtimePolicy | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
+    $expectedFiles['OptiScaler\RuntimeSync\runtimes.json'] = (Get-FileHash $policyPath).Hash
     $iniPath = Join-Path $payload 'OptiScaler.ini'
     $ini = Get-Content $iniPath -Raw -Encoding UTF8
     foreach ($pair in @(@('AmpereMfgUnlock','false'), @('AdaMfgUnlock','false'), @('SmoothMotion','false'), @('External','true'), @('LoadAsiPlugins','true'))) {
@@ -162,7 +176,22 @@ if ($ISCCPath) {
     $template = $template.Replace('#define MyAppVersion "1.0.0.0"', '#define MyAppVersion "0.9.33"')
     $template = $template.Replace('LicenseFile=DLSS for NVIDIA - License.rtf', 'LicenseFile=' + (Join-Path $projectRoot 'DLSS for NVIDIA - License.rtf'))
     $template = $template.Replace('InfoBeforeFile=DLSS Unlocked Intro.rtf', 'InfoBeforeFile=' + (Join-Path $projectRoot 'DLSS Unlocked Intro.rtf'))
-    if ($isTransfusion) { $template = $template.Replace('AmpereMfgUnlock=true','AmpereMfgUnlock=false') }
+    if ($isTransfusion) {
+        $template = $template.Replace('AmpereMfgUnlock=true','AmpereMfgUnlock=false')
+        $hook = Get-Content (Join-Path $PSScriptRoot 'runtime-sync/installer-hook.iss') -Raw -Encoding UTF8
+        $marker = 'procedure CurStepChanged(CurStep: TSetupStep);'
+        if (!$template.Contains($marker)) { throw 'Installer post-install hook not found' }
+        $template = $template.Replace($marker, $hook + "`r`n" + $marker)
+        $postInstall = 'CleanAndConfigureOptiScalerIni(IniPath);'
+        if (!$template.Contains($postInstall)) { throw 'Installer configuration hook not found' }
+        $syncCall = @'
+      if WizardIsComponentSelected('streamline') then
+        if not RunRuntimeSync('Sync', 'last-install.log') then
+          if not WizardSilent then
+            MsgBox('Runtime sync could not finish. Close the game and run the Sync command in the game directory. See OptiScaler\RuntimeSync\last-install.log.', mbInformation, MB_OK);
+'@
+        $template = $template.Replace($postInstall, $postInstall + "`r`n" + $syncCall)
+    }
     $installerScript = Join-Path $work 'DLSS unlocked zh-CN.iss'
     [IO.File]::WriteAllText($installerScript, $template, [Text.UTF8Encoding]::new($true))
     & $ISCCPath "/O$output" "/Fdlss-unlocked-setup-$TagName" $installerScript

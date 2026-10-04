@@ -35,7 +35,10 @@ try {
     Get-ChildItem -LiteralPath $PSScriptRoot -File | ForEach-Object {
         Copy-Item -LiteralPath $_.FullName -Destination $patchPath -Force
     }
-    if ($TransfusionProfile) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'transfusion') -Destination $patchPath -Recurse -Force }
+    if ($TransfusionProfile) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'transfusion') -Destination $patchPath -Recurse -Force
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'runtime-sync') -Destination $patchPath -Recurse -Force
+    }
     $manifest = [ordered]@{
         Backend = 'ShyVortex/OptiScaler-DLSSNR-PreSR-Multipass'
         Version = '0.9.33'
