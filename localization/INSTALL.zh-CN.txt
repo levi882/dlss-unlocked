@@ -1,0 +1,26 @@
+OptiScaler 0.9.33 游戏内菜单简体中文补丁（64 位 Windows）
+
+本补丁基于 ShyVortex/OptiScaler-DLSSNR-PreSR-Multipass 0.9.33。
+包含中文菜单、悬停说明和中文字体加载；使用现有 DLSS Unlocked 的配套文件和配置。
+
+安装方法：
+1. 完全退出游戏。
+2. 找到游戏实际加载的 OptiScaler 代理文件，例如 dxgi.dll、version.dll 或 winmm.dll。
+   请确认它属于 OptiScaler；不要覆盖其他模组或游戏原生 DLL。
+3. 备份此文件。将本包的 OptiScaler.dll 改为相同文件名，再替换原文件。
+   若通过 ASI 加载，则使用原 OptiScaler ASI 的文件名和位置。
+4. 保留原 OptiScaler.ini 和 OptiScaler 文件夹中的配套运行库。
+5. 重新启动游戏，用原来的菜单快捷键打开菜单。
+
+回退：退出游戏后恢复备份的原文件即可。
+
+字体：自动使用 Windows 自带的微软雅黑、黑体或 Arial Unicode。
+无需修改 UseHQFont；自定义西文字体仍保留，中文通过字体合并显示。
+如果这些字体均不可用，菜单会保留英文，并在日志中记录字体未找到。
+
+已验证：DLL 编译、中文字符覆盖、菜单布局尺寸和控件点击。
+预览来自独立 ImGui 检查程序；尚未在具体游戏中验证此 DLL。
+
+源码：https://github.com/ShyVortex/OptiScaler-DLSSNR-PreSR-Multipass
+基准提交：8bfff2724e0287891d3c636cfede12cb4eca876b
+汉化源码和构建脚本位于 dlss-unlocked 项目的 localization 文件夹。

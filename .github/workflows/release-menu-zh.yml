@@ -1,0 +1,52 @@
+name: Publish Chinese in-game menu release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Draft release containing the validated menu patch
+        required: true
+        default: NR-v0.9.33-zh-CN
+
+permissions:
+  contents: write
+
+concurrency:
+  group: menu-zh-release-${{ inputs.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download pinned upstream package and validated Chinese menu
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path temp_optiscaler/release-input -Force | Out-Null
+          gh release download NR-v0.9.33 --repo ShyVortex/dlss-unlocked --pattern dlss-unlocked-standalone-NR-v0.9.33.zip --dir temp_optiscaler/release-input
+          if ($LASTEXITCODE -ne 0) { throw 'Upstream download failed' }
+          gh release download $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern OptiScaler-0.9.33-zh-CN.zip --dir temp_optiscaler/release-input
+          if ($LASTEXITCODE -ne 0) { throw 'Menu patch download failed' }
+      - name: Install Inno Setup compiler
+        shell: pwsh
+        run: |
+          choco install innosetup --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
+      - name: Package and verify complete standalone archive and installer
+        shell: pwsh
+        run: |
+          ./localization/package-release.ps1 -UpstreamZip temp_optiscaler/release-input/dlss-unlocked-standalone-NR-v0.9.33.zip -MenuPatchZip temp_optiscaler/release-input/OptiScaler-0.9.33-zh-CN.zip -ISCCPath 'C:/Program Files (x86)/Inno Setup 6/ISCC.exe' -TagName $env:RELEASE_TAG
+      - name: Publish both packages with brief release notes
+        shell: pwsh
+        run: |
+          gh release upload $env:RELEASE_TAG "Output/dlss-unlocked-setup-$env:RELEASE_TAG.exe" "Output/dlss-unlocked-standalone-$env:RELEASE_TAG.zip" --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed' }
+          gh release delete-asset $env:RELEASE_TAG OptiScaler-0.9.33-zh-CN.zip --repo $env:GITHUB_REPOSITORY --yes
+          if ($LASTEXITCODE -ne 0) { throw 'Temporary build input cleanup failed' }
+          '游戏内 OptiScaler 菜单已汉化为简体中文。' | Set-Content -LiteralPath release-notes.txt -Encoding utf8
+          gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --title 'DLSS Unlocked v0.9.33 简体中文菜单版' --notes-file release-notes.txt --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
