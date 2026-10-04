@@ -21,7 +21,11 @@ $manifest = Get-Content -LiteralPath (Join-Path $patch 'manifest.json') -Raw -En
 $menuDll = Join-Path $patch 'OptiScaler.dll'
 if ($manifest.Version -ne '0.9.33' -or $manifest.BaseCommit -ne '8bfff2724e0287891d3c636cfede12cb4eca876b') { throw 'Unexpected menu build provenance' }
 if ((Get-FileHash -LiteralPath $menuDll).Hash -ne $manifest.Sha256) { throw 'Chinese menu DLL SHA256 mismatch' }
-if ((Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'menu.zh-CN.txt')).Hash -ne $manifest.TranslationSha256) { throw 'Translation source SHA256 mismatch' }
+$patchDictionary = Join-Path $patch 'SourcePatch\menu.zh-CN.txt'
+if ((Get-FileHash -LiteralPath $patchDictionary).Hash -ne $manifest.TranslationSha256) { throw 'Packaged translation source SHA256 mismatch' }
+$patchText = (Get-Content -LiteralPath $patchDictionary -Raw -Encoding UTF8).Replace("`r`n", "`n")
+$repoText = (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'menu.zh-CN.txt') -Raw -Encoding UTF8).Replace("`r`n", "`n")
+if (![string]::Equals($patchText, $repoText, [StringComparison]::Ordinal)) { throw 'Repository translation differs from the validated menu build' }
 if (!(Test-Path -LiteralPath (Join-Path $payload 'dxgi.dll'))) { throw 'Upstream proxy DLL is missing' }
 $before = @{}
 Get-ChildItem -LiteralPath $payload -Recurse -File | ForEach-Object {

@@ -39,7 +39,9 @@ jobs:
       - name: Package and verify complete standalone archive and installer
         shell: pwsh
         run: |
-          ./localization/package-release.ps1 -UpstreamZip temp_optiscaler/release-input/dlss-unlocked-standalone-NR-v0.9.33.zip -MenuPatchZip temp_optiscaler/release-input/OptiScaler-0.9.33-zh-CN.zip -ISCCPath 'C:/Program Files (x86)/Inno Setup 6/ISCC.exe' -TagName $env:RELEASE_TAG
+          $compiler = @('C:/Program Files (x86)/Inno Setup 6/ISCC.exe', 'C:/Program Files/Inno Setup 6/ISCC.exe') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (!$compiler) { throw 'Inno Setup compiler not found' }
+          ./localization/package-release.ps1 -UpstreamZip temp_optiscaler/release-input/dlss-unlocked-standalone-NR-v0.9.33.zip -MenuPatchZip temp_optiscaler/release-input/OptiScaler-0.9.33-zh-CN.zip -ISCCPath $compiler -TagName $env:RELEASE_TAG
       - name: Publish both packages with brief release notes
         shell: pwsh
         run: |
