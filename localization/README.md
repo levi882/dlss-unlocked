@@ -45,3 +45,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File localization/build-menu-zh.p
 原控件 ID、翻译文本宽度、`##` 隐藏 ID，以及实际模拟鼠标点击。
 它也可以输出独立菜单预览；该预览不代表游戏内运行验证。
 未映射的动态后端诊断、技术标识和文件名保留原文。
+
+## RTX 40 专版
+
+RTX 40 使用同一 Transfusion 中文面板及官方优化 ASI，NR 保留上游兼容运行库。
+两处 NR SHA256 为 E67DEE209320CDAFE0E93E45675D7AA34323A53ACC57A72B2E40A181581C989A。
+build-transfusion-components.ps1 -Profile RTX40 生成不含 FP16 替换的组件输入；
+package-release.ps1 -Rtx40BundleZip 配合 NR-v0.9.33-RTX40-zh-CN 标签独立打包。
+旧解锁和 Smooth Motion 默认关闭；使用方式见 INSTALL-RTX40.zh-CN.txt。
