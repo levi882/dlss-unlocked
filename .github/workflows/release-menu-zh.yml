@@ -6,6 +6,11 @@ on:
         description: Draft release holding validated build inputs and candidate outputs
         required: true
         default: NR-v0.9.33-runtime-sync-build-20261004
+      profile:
+        description: GPU package profile to build
+        type: choice
+        options: [Both, RTX40, RTX20-30-FP16]
+        default: Both
 permissions:
   contents: write
 concurrency:
@@ -16,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [RTX20-30-FP16, RTX40]
+        profile: ${{ fromJSON(inputs.profile == 'RTX40' && '["RTX40"]' || inputs.profile == 'RTX20-30-FP16' && '["RTX20-30-FP16"]' || '["RTX20-30-FP16","RTX40"]') }}
     runs-on: windows-latest
     env:
       GH_TOKEN: ${{ github.token }}

@@ -1,7 +1,8 @@
 DLSS Unlocked RTX 40 简体中文菜单版
 
 包含 DLSSG-Transfusion 1.4.5.3 官方优化核心、OptiScaler 0.9.33 中文菜单，
-NR 保留上游 ShortFuse 兼容运行库。已在 RTX 4070 Ti 的极限竞速：地平线 5 验证 3 倍帧生成。
+NR 使用 ShortFuse SF-v2（310.8.2.0），来源为 RankFTW/rhi-repo。
+帧生成路径已在 RTX 4070 Ti 的极限竞速：地平线 5 验证 3 倍；SF-v2 NR 画面效果尚未实测。
 
 关闭游戏并备份当前文件，再运行安装程序或将整个 ZIP 解压到游戏渲染 EXE 目录。
 安装器在选中 Streamline 组件时自动备份并同步游戏原生帧生成运行库。
@@ -26,8 +27,9 @@ Transfusion 面板中标注 RTX 30 的 Smooth Motion 实验选项不适用于 RT
 
 根目录 dxgi.dll 为 OptiScaler；安装器也提供 version/winmm/ASI 入口选择。
 手动更新须同时覆盖 OptiScaler.ini，仅覆盖 DLL 会遗留旧开关。
-两处 nvngx_dlssnr.dll 均为上游兼容版：根目录和 OptiScaler/streamline/。
-SHA256: E67DEE209320CDAFE0E93E45675D7AA34323A53ACC57A72B2E40A181581C989A
+两处 nvngx_dlssnr.dll 均为 SF-v2：根目录和 OptiScaler/streamline/。
+SHA256: 6EB209E764F39872625DEBD6ABAF45E2BB6322F6F270F781F70C059AE30B3927
+来源：https://github.com/RankFTW/rhi-repo/releases/tag/dlssnr-310.8.SF-v2
 组件来源见 Licenses/RTX40-manifest.json；面板适配源码见
 Licenses/OptiScaler-Transfusion-SourcePatch.zip。
 中文字体从 Windows 系统读取，缺少中文字体时回退英文。

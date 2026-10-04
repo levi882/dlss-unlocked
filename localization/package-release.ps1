@@ -68,8 +68,8 @@ if ($isTransfusion) {
     $fp16Hash = '6DAC1B40F0C87AF84A8177B18C741E84FB0C914F204C9D87D95916B665BA3AF8'
     if ($isRtx2030 -and $expectedFiles['nvngx_dlssnr.dll'] -ne $fp16Hash) { throw 'FP16 runtime mismatch' }
     if ($isRtx40) {
-        $compatHash = 'E67DEE209320CDAFE0E93E45675D7AA34323A53ACC57A72B2E40A181581C989A'
-        if ($expectedFiles['nvngx_dlssnr.dll'] -ne $compatHash) { throw 'RTX40 compatibility runtime mismatch' }
+        $compatHash = '6EB209E764F39872625DEBD6ABAF45E2BB6322F6F270F781F70C059AE30B3927'
+        if ($expectedFiles['nvngx_dlssnr.dll'] -ne $compatHash -or $componentManifest.NrRuntime.Variant -ne 'ShortFuse SF-v2' -or $componentManifest.NrRuntime.DllSha256 -ne $compatHash) { throw 'RTX40 SF-v2 runtime mismatch' }
         Copy-Item (Join-Path $payload 'nvngx_dlssnr.dll') (Join-Path $payload 'OptiScaler/streamline/nvngx_dlssnr.dll') -Force
         $expectedFiles['OptiScaler\streamline\nvngx_dlssnr.dll'] = $compatHash
     }
