@@ -1,7 +1,9 @@
 param(
     [string]$SourcePath = '',
     [string]$MSBuildPath = '',
-    [switch]$TransfusionProfile
+    [switch]$TransfusionProfile,
+    [string]$Version = '0.9.34',
+    [string]$BaseCommit = '73fab132f9f48d194926b27124d9320b0b4cc870'
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
@@ -18,13 +20,13 @@ if (!$MSBuildPath) {
     }
 }
 if (!$MSBuildPath -or !(Test-Path -LiteralPath $MSBuildPath)) { throw 'Provide -MSBuildPath for Visual Studio 2022 MSBuild.exe' }
-& (Join-Path $PSScriptRoot 'apply-menu-zh.ps1') -SourcePath $SourcePath
+& (Join-Path $PSScriptRoot 'apply-menu-zh.ps1') -SourcePath $SourcePath -Version $Version -BaseCommit $BaseCommit
 if ($TransfusionProfile) { & (Join-Path $PSScriptRoot 'apply-transfusion.ps1') -SourcePath $SourcePath }
 Push-Location $projectRoot
 try {
     & $MSBuildPath (Join-Path $SourcePath 'OptiScaler.sln') /t:Build /p:Configuration=Release /p:Platform=x64 /p:PostBuildEventUseInBuild=false /m:4 /v:minimal /fl '/flp:logfile=temp_optiscaler\menu-build.log;verbosity=minimal'
     if ($LASTEXITCODE -ne 0) { throw 'Menu DLL build failed; inspect temp_optiscaler/menu-build.log' }
-    $packageName = if ($TransfusionProfile) { 'OptiScaler-0.9.33-Transfusion-zh-CN' } else { 'OptiScaler-0.9.33-zh-CN' }
+    $packageName = if ($TransfusionProfile) { "OptiScaler-$Version-Transfusion-zh-CN" } else { "OptiScaler-$Version-zh-CN" }
     $packagePath = Join-Path $projectRoot ('Output\' + $packageName)
     New-Item -ItemType Directory -Path $packagePath -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $SourcePath 'x64\Release\OptiScaler.dll') -Destination $packagePath -Force
@@ -41,7 +43,7 @@ try {
     }
     $manifest = [ordered]@{
         Backend = 'ShyVortex/OptiScaler-DLSSNR-PreSR-Multipass'
-        Version = '0.9.33'
+        Version = $Version
         BaseCommit = (& git -C $SourcePath rev-parse HEAD).Trim()
         Language = 'zh-CN'
         Architecture = 'x64'

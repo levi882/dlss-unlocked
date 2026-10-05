@@ -4,10 +4,13 @@
     [string]$Rtx2030BundleZip = '',
     [string]$Rtx40BundleZip = '',
     [string]$ISCCPath = '',
-    [string]$TagName = 'NR-v0.9.33-zh-CN'
+    [string]$TagName = 'NR-v0.9.34-zh-CN',
+    [string]$Version = '0.9.34',
+    [string]$BaseCommit = '73fab132f9f48d194926b27124d9320b0b4cc870'
 )
 $ErrorActionPreference = 'Stop'
-if ($TagName -notmatch '^NR-v0\.9\.33-(?:(?:RTX20-30-FP16|RTX40)-)?zh-CN(?:\.[0-9]+)?$') { throw 'Unsupported release tag' }
+if ($Version -notmatch '^\d+\.\d+\.\d+$' -or $BaseCommit -notmatch '^[a-f0-9]{40}$') { throw 'Invalid source version or commit' }
+if ($TagName -notmatch ('^NR-v' + [regex]::Escape($Version) + '-(?:(?:RTX20-30-FP16|RTX40)-)?zh-CN(?:\.[0-9]+)?$')) { throw 'Unsupported release tag' }
 $isRtx2030 = $TagName -match '-RTX20-30-FP16-'
 $isRtx40 = $TagName -match '-RTX40-'
 $isTransfusion = $isRtx2030 -or $isRtx40
@@ -18,6 +21,8 @@ if ($isRtx2030 -ne [bool]$Rtx2030BundleZip) { throw 'The RTX 20/30 release requi
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $UpstreamZip = [IO.Path]::GetFullPath($UpstreamZip)
 $MenuPatchZip = [IO.Path]::GetFullPath($MenuPatchZip)
+# Keep the existing verified companions and GPU runtimes. Only the rebuilt
+# OptiScaler proxy imports upstream source fixes; changing the baseline is separate.
 $baselineHash = 'E2DAD29EBFCA2DCF9094FAFB25692EC2CEE1E822DCAAD6949051971FE58CFC7E'
 if ((Get-FileHash -LiteralPath $UpstreamZip).Hash -ne $baselineHash) { throw 'Upstream archive SHA256 mismatch' }
 $work = Join-Path $projectRoot ('temp_optiscaler\release-' + [guid]::NewGuid().ToString('N'))
@@ -28,7 +33,7 @@ Expand-Archive -LiteralPath $UpstreamZip -DestinationPath $payload
 Expand-Archive -LiteralPath $MenuPatchZip -DestinationPath $patch
 $manifest = Get-Content -LiteralPath (Join-Path $patch 'manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 $menuDll = Join-Path $patch 'OptiScaler.dll'
-if ($manifest.Version -ne '0.9.33' -or $manifest.BaseCommit -ne '8bfff2724e0287891d3c636cfede12cb4eca876b') { throw 'Unexpected menu build provenance' }
+if ($manifest.Version -ne $Version -or $manifest.BaseCommit -ne $BaseCommit) { throw 'Unexpected menu build provenance' }
 if ((Get-FileHash -LiteralPath $menuDll).Hash -ne $manifest.Sha256) { throw 'Chinese menu DLL SHA256 mismatch' }
 $patchDictionary = Join-Path $patch 'SourcePatch\menu.zh-CN.txt'
 if ((Get-FileHash -LiteralPath $patchDictionary).Hash -ne $manifest.TranslationSha256) { throw 'Packaged translation source SHA256 mismatch' }
@@ -173,7 +178,7 @@ if ($ISCCPath) {
     $template = Get-Content -LiteralPath (Join-Path $projectRoot 'DLSS unlocked.iss') -Raw -Encoding UTF8
     $fileBlock = "[Files]`r`n" + ($lines -join "`r`n") + "`r`n`r`n"
     $template = [regex]::Replace($template, '(?ms)^\[Files\].*?(?=^\[InstallDelete\])', [Text.RegularExpressions.MatchEvaluator]{ param($m) $fileBlock })
-    $template = $template.Replace('#define MyAppVersion "1.0.0.0"', '#define MyAppVersion "0.9.33"')
+    $template = $template.Replace('#define MyAppVersion "1.0.0.0"', '#define MyAppVersion "' + $Version + '"')
     $template = $template.Replace('LicenseFile=DLSS for NVIDIA - License.rtf', 'LicenseFile=' + (Join-Path $projectRoot 'DLSS for NVIDIA - License.rtf'))
     $template = $template.Replace('InfoBeforeFile=DLSS Unlocked Intro.rtf', 'InfoBeforeFile=' + (Join-Path $projectRoot 'DLSS Unlocked Intro.rtf'))
     if ($isTransfusion) {

@@ -1,11 +1,15 @@
-name: Build RTX20-30 and RTX40 Chinese runtime-sync releases
+name: Build Chinese Transfusion release candidates
 on:
+  schedule:
+    - cron: '30 */3 * * *'
   workflow_dispatch:
     inputs:
+      version:
+        description: Upstream source version, or latest
+        default: latest
       build_tag:
-        description: Draft release holding validated build inputs and candidate outputs
-        required: true
-        default: NR-v0.9.33-runtime-sync-build-20261004
+        description: Draft holding a locally validated menu build (empty to compile source)
+        default: ''
       profile:
         description: GPU package profile to build
         type: choice
@@ -17,7 +21,55 @@ concurrency:
   group: runtime-sync-transfusion-release
   cancel-in-progress: false
 jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      commit: ${{ steps.resolve.outputs.commit }}
+      draft: ${{ steps.resolve.outputs.draft }}
+      needed: ${{ steps.resolve.outputs.needed }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - id: resolve
+        env:
+          REQUESTED_VERSION: ${{ inputs.version || 'latest' }}
+          PROFILE: ${{ inputs.profile || 'Both' }}
+          BUILD_TAG: ${{ inputs.build_tag }}
+        run: |
+          set -euo pipefail
+          version="$REQUESTED_VERSION"
+          if [ "$version" = latest ]; then
+            version=$(gh api repos/ShyVortex/OptiScaler-DLSSNR-PreSR-Multipass/releases/latest --jq .tag_name)
+          fi
+          version="${version#v}"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          commit=$(gh api "repos/ShyVortex/OptiScaler-DLSSNR-PreSR-Multipass/commits/v$version" --jq .sha)
+          draft="NR-v$version-zh-CN-build-${commit:0:8}-${GITHUB_SHA:0:8}"
+          needed=true
+          if [ -z "$BUILD_TAG" ]; then
+            profiles=(RTX20-30-FP16 RTX40)
+            if [ "$PROFILE" != Both ]; then profiles=("$PROFILE"); fi
+            complete=true
+            names=$(gh release view "$draft" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)
+            for profile in "${profiles[@]}"; do
+              tag="NR-v$version-$profile-zh-CN"
+              for name in "dlss-unlocked-standalone-$tag.zip" "dlss-unlocked-setup-$tag.exe"; do
+                if ! grep -Fxq "$name" <<< "$names"; then complete=false; fi
+              done
+            done
+            if [ "$complete" = true ]; then needed=false; fi
+          fi
+          if [ "$needed" = true ]; then
+            if ! gh release view "$draft" --repo "$GITHUB_REPOSITORY" --json isDraft >/dev/null 2>&1; then
+              gh release create "$draft" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title "Chinese Transfusion $version candidates" --notes 'Validated build candidates. Game rendering requires separate verification.'
+            fi
+            [ "$(gh release view "$draft" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true ]
+          fi
+          printf 'version=%s\ncommit=%s\ndraft=%s\nneeded=%s\n' "$version" "$commit" "$draft" "$needed" >> "$GITHUB_OUTPUT"
   package:
+    needs: discover
+    if: needs.discover.outputs.needed == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -26,10 +78,22 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       BUILD_TAG: ${{ inputs.build_tag }}
+      COMPONENT_TAG: NR-v0.9.33-runtime-sync-build-20261004
+      VERSION: ${{ needs.discover.outputs.version }}
+      SOURCE_COMMIT: ${{ needs.discover.outputs.commit }}
+      DRAFT_TAG: ${{ needs.discover.outputs.draft }}
       PROFILE: ${{ matrix.profile }}
-      RELEASE_TAG: NR-v0.9.33-${{ matrix.profile }}-zh-CN
+      RELEASE_TAG: NR-v${{ needs.discover.outputs.version }}-${{ matrix.profile }}-zh-CN
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        if: inputs.build_tag == '' || github.event_name == 'schedule'
+        with:
+          repository: ShyVortex/OptiScaler-DLSSNR-PreSR-Multipass
+          ref: ${{ needs.discover.outputs.commit }}
+          path: temp_optiscaler/localized-source
+          submodules: true
+          fetch-depth: 0
       - name: Download pinned upstream package and validated inputs
         shell: pwsh
         run: |
@@ -37,10 +101,31 @@ jobs:
           gh release download NR-v0.9.33 --repo ShyVortex/dlss-unlocked --pattern dlss-unlocked-standalone-NR-v0.9.33.zip --dir temp_optiscaler/release-input
           if ($LASTEXITCODE -ne 0) { throw 'Upstream download failed' }
           $component = if ($env:PROFILE -eq 'RTX40') { 'RTX40-Transfusion-components.zip' } else { 'RTX20-30-FP16-Transfusion-components.zip' }
-          foreach ($asset in @('OptiScaler-0.9.33-Transfusion-zh-CN.zip', $component)) {
-            gh release download $env:BUILD_TAG --repo $env:GITHUB_REPOSITORY --pattern $asset --dir temp_optiscaler/release-input
+          foreach ($asset in @($component, 'RTX20-30-FP16-Transfusion-components.zip') | Select-Object -Unique) {
+            gh release download $env:COMPONENT_TAG --repo $env:GITHUB_REPOSITORY --pattern $asset --dir temp_optiscaler/release-input
             if ($LASTEXITCODE -ne 0) { throw "Component download failed: $asset" }
           }
+          New-Item -ItemType Directory -Path Output -Force | Out-Null
+          Copy-Item temp_optiscaler/release-input/RTX20-30-FP16-Transfusion-components.zip Output/
+      - name: Compile upstream fixes with existing Chinese Transfusion integration
+        if: inputs.build_tag == '' || github.event_name == 'schedule'
+        shell: pwsh
+        run: |
+          ./localization/build-menu-zh.ps1 -SourcePath temp_optiscaler/localized-source -TransfusionProfile -Version $env:VERSION -BaseCommit $env:SOURCE_COMMIT
+          ./localization/validate-menu.ps1 -SourcePath temp_optiscaler/localized-source
+          Copy-Item "Output/OptiScaler-$env:VERSION-Transfusion-zh-CN.zip" temp_optiscaler/release-input/
+      - name: Download locally validated menu build
+        if: inputs.build_tag != '' && github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          gh release download $env:BUILD_TAG --repo $env:GITHUB_REPOSITORY --pattern "OptiScaler-$env:VERSION-Transfusion-zh-CN.zip" --pattern menu-validation.json --dir temp_optiscaler/release-input
+          if ($LASTEXITCODE -ne 0) { throw 'Validated menu download failed' }
+          $validation = Get-Content temp_optiscaler/release-input/menu-validation.json -Raw | ConvertFrom-Json
+          if ($validation.SourceCommit -ne $env:SOURCE_COMMIT) { throw 'Validation source mismatch' }
+          foreach ($name in @('low-latency','viewport','chinese-menu','transfusion-menu')) {
+            if ($name -notin $validation.Passed) { throw "Missing validation: $name" }
+          }
+          Copy-Item temp_optiscaler/release-input/menu-validation.json Output/
       - name: Install Inno Setup compiler
         shell: pwsh
         run: |
@@ -52,9 +137,13 @@ jobs:
           $compiler = @('C:/Program Files (x86)/Inno Setup 6/ISCC.exe', 'C:/Program Files/Inno Setup 6/ISCC.exe') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
           if (!$compiler) { throw 'Inno Setup compiler not found' }
           $bundle = if ($env:PROFILE -eq 'RTX40') { @{Rtx40BundleZip='temp_optiscaler/release-input/RTX40-Transfusion-components.zip'} } else { @{Rtx2030BundleZip='temp_optiscaler/release-input/RTX20-30-FP16-Transfusion-components.zip'} }
-          ./localization/package-release.ps1 -UpstreamZip temp_optiscaler/release-input/dlss-unlocked-standalone-NR-v0.9.33.zip -MenuPatchZip temp_optiscaler/release-input/OptiScaler-0.9.33-Transfusion-zh-CN.zip @bundle -ISCCPath $compiler -TagName $env:RELEASE_TAG
+          ./localization/package-release.ps1 -UpstreamZip temp_optiscaler/release-input/dlss-unlocked-standalone-NR-v0.9.33.zip -MenuPatchZip "temp_optiscaler/release-input/OptiScaler-$env:VERSION-Transfusion-zh-CN.zip" @bundle -ISCCPath $compiler -TagName $env:RELEASE_TAG -Version $env:VERSION -BaseCommit $env:SOURCE_COMMIT
       - name: Upload candidates to draft for review before replacement
         shell: pwsh
         run: |
-          gh release upload $env:BUILD_TAG "Output/dlss-unlocked-setup-$env:RELEASE_TAG.exe" "Output/dlss-unlocked-standalone-$env:RELEASE_TAG.zip" --repo $env:GITHUB_REPOSITORY --clobber
+          $draft = gh release view $env:DRAFT_TAG --repo $env:GITHUB_REPOSITORY --json isDraft | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or !$draft.isDraft) { throw 'Candidate uploads require a draft release' }
+          gh release upload $env:DRAFT_TAG "Output/dlss-unlocked-setup-$env:RELEASE_TAG.exe" "Output/dlss-unlocked-standalone-$env:RELEASE_TAG.zip" --repo $env:GITHUB_REPOSITORY --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Candidate upload failed' }
+          gh release upload $env:DRAFT_TAG "temp_optiscaler/release-input/OptiScaler-$env:VERSION-Transfusion-zh-CN.zip" Output/menu-validation.json --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Build provenance upload failed' }

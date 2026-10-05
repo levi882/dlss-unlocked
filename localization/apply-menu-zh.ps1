@@ -1,11 +1,18 @@
-param([Parameter(Mandatory = $true)][string]$SourcePath)
+param(
+    [Parameter(Mandatory = $true)][string]$SourcePath,
+    [string]$Version = '0.9.34',
+    [string]$BaseCommit = '73fab132f9f48d194926b27124d9320b0b4cc870'
+)
 $ErrorActionPreference = 'Stop'
 $SourcePath = [IO.Path]::GetFullPath($SourcePath)
-$baseCommit = '8bfff2724e0287891d3c636cfede12cb4eca876b'
+$baseCommit = $BaseCommit
 $actualCommit = (& git -C $SourcePath rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $actualCommit -ne $baseCommit) {
-    throw "This menu patch targets OptiScaler 0.9.33 at $baseCommit; got $actualCommit"
+    throw "This menu patch targets OptiScaler $Version at $baseCommit; got $actualCommit"
 }
+if ($Version -notmatch '^\d+\.\d+\.\d+$' -or $BaseCommit -notmatch '^[a-f0-9]{40}$') { throw 'Invalid source version or commit' }
+$tagCommit = (& git -C $SourcePath rev-parse "v${Version}^{commit}").Trim()
+if ($LASTEXITCODE -ne 0 -or $tagCommit -ne $BaseCommit) { throw 'Source commit does not match the upstream version tag' }
 $utf8 = New-Object Text.UTF8Encoding($false)
 $entries = [Collections.Specialized.OrderedDictionary]::new([StringComparer]::Ordinal)
 foreach ($line in [IO.File]::ReadAllLines((Join-Path $PSScriptRoot 'menu.zh-CN.txt'), $utf8)) {
