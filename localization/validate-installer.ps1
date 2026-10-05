@@ -14,6 +14,13 @@ function Assert($Condition, [string]$Message) {
         throw $Message
     }
 }
+function InvokeWindowsChild([scriptblock]$Action) {
+    # A pwsh runner's PS7 module path is incompatible with the Windows
+    # PowerShell launched by Inno. Let the child initialize its own defaults.
+    $previousModulePath = $env:PSModulePath
+    try { $env:PSModulePath = $null; & $Action }
+    finally { $env:PSModulePath = $previousModulePath }
+}
 $policy = Get-Content (Join-Path $archive 'OptiScaler/RuntimeSync/runtimes.json') -Raw | ConvertFrom-Json
 $originals = @{}
 foreach ($file in $policy.Files | Where-Object Name -NE 'sl.pcl.dll') {
@@ -25,7 +32,7 @@ foreach ($file in $policy.Files | Where-Object Name -NE 'sl.pcl.dll') {
     try { $stream.WriteByte(42) } finally { $stream.Dispose() }
     $originals[$file.Name] = (Get-FileHash $target).Hash
 }
-$process = Start-Process -FilePath (Join-Path $root "Output/dlss-unlocked-setup-$TagName.exe") -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"",'/COMPONENTS=mainfiles/dlldxgi,core,streamline,optional/regentries,optional/fgdebug',"/LOG=`"$work/install.log`"") -WindowStyle Hidden -Wait -PassThru
+$process = InvokeWindowsChild { Start-Process -FilePath (Join-Path $root "Output/dlss-unlocked-setup-$TagName.exe") -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"",'/COMPONENTS=mainfiles/dlldxgi,core,streamline,optional/regentries,optional/fgdebug',"/LOG=`"$work/install.log`"") -WindowStyle Hidden -Wait -PassThru }
 Assert ($process.ExitCode -eq 0) "Installer exited $($process.ExitCode)"
 $checked = 0
 foreach ($file in Get-ChildItem $archive -Recurse -File) {
@@ -44,9 +51,11 @@ $policy = Get-Content (Join-Path $install 'OptiScaler/RuntimeSync/runtimes.json'
 foreach ($file in $policy.Files) {
     Assert ((Get-FileHash (Join-Path $install $file.Name)).Hash -eq $file.Sha256) "Automatic runtime sync failed: $($file.Name)"
 }
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $install 'runtime_sync.ps1') -InstallDir $install -Mode Check
-Assert ($LASTEXITCODE -eq 0) 'Installed runtime check failed'
-$process = Start-Process -FilePath (Join-Path $install 'unins000.exe') -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -WindowStyle Hidden -Wait -PassThru
+InvokeWindowsChild {
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $install 'runtime_sync.ps1') -InstallDir $install -Mode Check
+    Assert ($LASTEXITCODE -eq 0) 'Installed runtime check failed'
+}
+$process = InvokeWindowsChild { Start-Process -FilePath (Join-Path $install 'unins000.exe') -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -WindowStyle Hidden -Wait -PassThru }
 Assert ($process.ExitCode -eq 0) 'Uninstaller failed'
 foreach ($file in $policy.Files) {
     $target = Join-Path $install $file.Name
