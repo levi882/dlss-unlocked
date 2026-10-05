@@ -7,6 +7,17 @@ $install = Join-Path $work 'installed'
 Expand-Archive -LiteralPath (Join-Path $root "Output/dlss-unlocked-standalone-$TagName.zip") -DestinationPath $archive
 New-Item -ItemType Directory -Path $install | Out-Null
 function Assert($Condition, [string]$Message) { if (!$Condition) { throw $Message } }
+$policy = Get-Content (Join-Path $archive 'OptiScaler/RuntimeSync/runtimes.json') -Raw | ConvertFrom-Json
+$originals = @{}
+foreach ($file in $policy.Files | Where-Object Name -NE 'sl.pcl.dll') {
+    # Model an existing native chain with a different hash while retaining its
+    # real PE version metadata. These fixture copies are never executed.
+    $target = Join-Path $install $file.Name
+    Copy-Item (Join-Path $archive $file.Source) $target
+    $stream = [IO.File]::Open($target, [IO.FileMode]::Append)
+    try { $stream.WriteByte(42) } finally { $stream.Dispose() }
+    $originals[$file.Name] = (Get-FileHash $target).Hash
+}
 $process = Start-Process -FilePath (Join-Path $root "Output/dlss-unlocked-setup-$TagName.exe") -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=`"$install`"",'/COMPONENTS=mainfiles/dlldxgi,core,streamline,optional/regentries,optional/fgdebug',"/LOG=`"$work/install.log`"") -WindowStyle Hidden -Wait -PassThru
 Assert ($process.ExitCode -eq 0) "Installer exited $($process.ExitCode)"
 $checked = 0
@@ -30,7 +41,12 @@ foreach ($file in $policy.Files) {
 Assert ($LASTEXITCODE -eq 0) 'Installed runtime check failed'
 $process = Start-Process -FilePath (Join-Path $install 'unins000.exe') -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -WindowStyle Hidden -Wait -PassThru
 Assert ($process.ExitCode -eq 0) 'Uninstaller failed'
-foreach ($file in $policy.Files) { Assert (!(Test-Path (Join-Path $install $file.Name))) "Uninstall did not restore original absence: $($file.Name)" }
+foreach ($file in $policy.Files) {
+    $target = Join-Path $install $file.Name
+    if ($originals.ContainsKey($file.Name)) {
+        Assert ((Get-FileHash $target).Hash -eq $originals[$file.Name]) "Uninstall did not restore original file: $($file.Name)"
+    } else { Assert (!(Test-Path $target)) "Uninstall did not restore original absence: $($file.Name)" }
+}
 @{Tag=$TagName;InstallerFilesMatched=$checked;AutomaticSync=$true;UninstallRestore=$true;GameRenderingTested=$false} |
     ConvertTo-Json | Set-Content (Join-Path $root "Output/$TagName-installer-validation.json") -Encoding UTF8
 Write-Output "Verified $checked installer files, automatic runtime sync, and uninstall restoration."
