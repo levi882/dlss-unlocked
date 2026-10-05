@@ -37,8 +37,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Candidate repository commit not found' }
           $upstream = gh api "repos/ShyVortex/OptiScaler-DLSSNR-PreSR-Multipass/commits/v$env:VERSION" --jq .sha
           if ($LASTEXITCODE -ne 0 -or !$upstream.StartsWith($sourcePrefix)) { throw 'Upstream source mismatch' }
-          $candidate = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:BUILD_TAG" | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or !$candidate.draft) { throw 'Verified candidate draft required' }
+          $draft = gh release view $env:BUILD_TAG --repo $env:GITHUB_REPOSITORY --json apiUrl,isDraft | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or !$draft.isDraft) { throw 'Verified candidate draft required' }
+          $candidate = gh api $draft.apiUrl | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or !$candidate.draft -or $candidate.tag_name -ne $env:BUILD_TAG) { throw 'Candidate metadata mismatch' }
           New-Item -ItemType Directory -Path Output -Force | Out-Null
           gh release download $env:BUILD_TAG --repo $env:GITHUB_REPOSITORY --pattern '*-zh-CN.exe' --pattern '*-zh-CN.zip' --pattern '*-installer-validation.json' --pattern menu-validation.json --dir Output
           if ($LASTEXITCODE -ne 0) { throw 'Candidate download failed' }
