@@ -6,7 +6,14 @@ $archive = Join-Path $work 'archive'
 $install = Join-Path $work 'installed'
 Expand-Archive -LiteralPath (Join-Path $root "Output/dlss-unlocked-standalone-$TagName.zip") -DestinationPath $archive
 New-Item -ItemType Directory -Path $install | Out-Null
-function Assert($Condition, [string]$Message) { if (!$Condition) { throw $Message } }
+function Assert($Condition, [string]$Message) {
+    if (!$Condition) {
+        foreach ($log in @((Join-Path $work 'install.log'), (Join-Path $install 'OptiScaler/RuntimeSync/last-install.log'))) {
+            if (Test-Path $log) { Get-Content $log -Tail 35 -Encoding UTF8 }
+        }
+        throw $Message
+    }
+}
 $policy = Get-Content (Join-Path $archive 'OptiScaler/RuntimeSync/runtimes.json') -Raw | ConvertFrom-Json
 $originals = @{}
 foreach ($file in $policy.Files | Where-Object Name -NE 'sl.pcl.dll') {

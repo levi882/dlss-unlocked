@@ -1,0 +1,35 @@
+name: Verify existing Chinese installer on CI
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing package release to verify
+        required: true
+        default: NR-v0.9.33-RTX40-zh-CN
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and verify existing installer
+        shell: pwsh
+        run: |
+          if ($env:TAG -notmatch '^NR-v\d+\.\d+\.\d+-(RTX40|RTX20-30-FP16)-zh-CN$') { throw 'Invalid tag' }
+          New-Item -ItemType Directory -Path Output -Force | Out-Null
+          gh release download $env:TAG --repo $env:GITHUB_REPOSITORY --pattern '*.exe' --pattern '*.zip' --dir Output
+          if ($LASTEXITCODE -ne 0) { throw 'Package download failed' }
+          ./localization/validate-installer.ps1 -TagName $env:TAG
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installer-verification-logs
+          path: |
+            temp_optiscaler/**/install.log
+            temp_optiscaler/**/last-install.log
+            temp_optiscaler/**/last-restore.log
+            Output/*-installer-validation.json

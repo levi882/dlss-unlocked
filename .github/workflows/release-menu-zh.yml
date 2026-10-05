@@ -158,3 +158,14 @@ jobs:
             gh release upload $env:DRAFT_TAG "temp_optiscaler/release-input/OptiScaler-$env:VERSION-Transfusion-zh-CN.zip" Output/menu-validation.json --repo $env:GITHUB_REPOSITORY --clobber
             if ($LASTEXITCODE -ne 0) { throw 'Menu provenance upload failed' }
           }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ matrix.profile }}-build-validation
+          path: |
+            Output/OptiScaler-*-Transfusion-zh-CN.zip
+            Output/menu-validation.json
+            Output/*-installer-validation.json
+            temp_optiscaler/**/install.log
+            temp_optiscaler/**/last-install.log
+            temp_optiscaler/**/last-restore.log
