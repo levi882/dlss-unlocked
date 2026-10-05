@@ -100,8 +100,10 @@ if ($isTransfusion) {
         $expectedFiles[$pair[1].Replace('/','\')] = (Get-FileHash $target).Hash
     }
     $installGuide = if ($isRtx40) { 'INSTALL-RTX40.zh-CN.txt' } else { 'INSTALL-RTX20-30.zh-CN.txt' }
-    Copy-Item (Join-Path $PSScriptRoot $installGuide) (Join-Path $payload $installGuide)
-    $expectedFiles[$installGuide] = (Get-FileHash (Join-Path $payload $installGuide)).Hash
+    $guidePath = Join-Path $payload $installGuide
+    $guide = Get-Content (Join-Path $PSScriptRoot $installGuide) -Raw -Encoding UTF8
+    [IO.File]::WriteAllText($guidePath, $guide.Replace('OptiScaler 0.9.33', "OptiScaler $Version"), [Text.UTF8Encoding]::new($true))
+    $expectedFiles[$installGuide] = (Get-FileHash $guidePath).Hash
     foreach ($helper in Get-ChildItem (Join-Path $PSScriptRoot 'runtime-sync') -File | Where-Object { $_.Extension -in @('.ps1','.cmd') }) {
         Copy-Item -LiteralPath $helper.FullName -Destination (Join-Path $payload $helper.Name)
         $expectedFiles[$helper.Name] = (Get-FileHash $helper.FullName).Hash

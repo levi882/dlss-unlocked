@@ -54,9 +54,12 @@ jobs:
             names=$(gh release view "$draft" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)
             for profile in "${profiles[@]}"; do
               tag="NR-v$version-$profile-zh-CN"
-              for name in "dlss-unlocked-standalone-$tag.zip" "dlss-unlocked-setup-$tag.exe"; do
+              for name in "dlss-unlocked-standalone-$tag.zip" "dlss-unlocked-setup-$tag.exe" "$tag-installer-validation.json"; do
                 if ! grep -Fxq "$name" <<< "$names"; then complete=false; fi
               done
+            done
+            for name in "OptiScaler-$version-Transfusion-zh-CN.zip" menu-validation.json; do
+              if ! grep -Fxq "$name" <<< "$names"; then complete=false; fi
             done
             if [ "$complete" = true ]; then needed=false; fi
           fi
