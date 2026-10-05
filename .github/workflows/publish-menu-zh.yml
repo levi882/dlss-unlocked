@@ -44,7 +44,13 @@ jobs:
           New-Item -ItemType Directory -Path Output -Force | Out-Null
           gh release download $env:BUILD_TAG --repo $env:GITHUB_REPOSITORY --pattern '*-zh-CN.exe' --pattern '*-zh-CN.zip' --pattern '*-installer-validation.json' --pattern menu-validation.json --dir Output
           if ($LASTEXITCODE -ne 0) { throw 'Candidate download failed' }
-          foreach ($file in Get-ChildItem Output -File) {
+          $expectedNames = @('menu-validation.json', "OptiScaler-$env:VERSION-Transfusion-zh-CN.zip")
+          foreach ($profile in @('RTX20-30-FP16','RTX40')) {
+            $tag = "NR-v$env:VERSION-$profile-zh-CN"
+            $expectedNames += @("dlss-unlocked-setup-$tag.exe", "dlss-unlocked-standalone-$tag.zip", "$tag-installer-validation.json")
+          }
+          foreach ($name in $expectedNames) {
+            $file = Get-Item (Join-Path Output $name)
             $asset = $candidate.assets | Where-Object name -EQ $file.Name | Select-Object -First 1
             if (!$asset -or $asset.digest -ne ('sha256:' + (Get-FileHash $file.FullName).Hash.ToLowerInvariant())) { throw "Candidate digest mismatch: $($file.Name)" }
           }
