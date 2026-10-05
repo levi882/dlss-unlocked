@@ -78,7 +78,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       BUILD_TAG: ${{ inputs.build_tag }}
-      COMPONENT_TAG: NR-v0.9.33-runtime-sync-build-20261004
+      COMPONENT_TAG: Transfusion-v1.4.5.3-zh-CN-build-inputs
       VERSION: ${{ needs.discover.outputs.version }}
       SOURCE_COMMIT: ${{ needs.discover.outputs.commit }}
       DRAFT_TAG: ${{ needs.discover.outputs.draft }}
@@ -138,6 +138,9 @@ jobs:
           if (!$compiler) { throw 'Inno Setup compiler not found' }
           $bundle = if ($env:PROFILE -eq 'RTX40') { @{Rtx40BundleZip='temp_optiscaler/release-input/RTX40-Transfusion-components.zip'} } else { @{Rtx2030BundleZip='temp_optiscaler/release-input/RTX20-30-FP16-Transfusion-components.zip'} }
           ./localization/package-release.ps1 -UpstreamZip temp_optiscaler/release-input/dlss-unlocked-standalone-NR-v0.9.33.zip -MenuPatchZip "temp_optiscaler/release-input/OptiScaler-$env:VERSION-Transfusion-zh-CN.zip" @bundle -ISCCPath $compiler -TagName $env:RELEASE_TAG -Version $env:VERSION -BaseCommit $env:SOURCE_COMMIT
+      - name: Verify installed files, runtime sync and uninstall restoration
+        shell: pwsh
+        run: ./localization/validate-installer.ps1 -TagName $env:RELEASE_TAG
       - name: Upload candidates to draft for review before replacement
         shell: pwsh
         run: |
@@ -145,5 +148,5 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or !$draft.isDraft) { throw 'Candidate uploads require a draft release' }
           gh release upload $env:DRAFT_TAG "Output/dlss-unlocked-setup-$env:RELEASE_TAG.exe" "Output/dlss-unlocked-standalone-$env:RELEASE_TAG.zip" --repo $env:GITHUB_REPOSITORY --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Candidate upload failed' }
-          gh release upload $env:DRAFT_TAG "temp_optiscaler/release-input/OptiScaler-$env:VERSION-Transfusion-zh-CN.zip" Output/menu-validation.json --repo $env:GITHUB_REPOSITORY --clobber
+          gh release upload $env:DRAFT_TAG "temp_optiscaler/release-input/OptiScaler-$env:VERSION-Transfusion-zh-CN.zip" Output/menu-validation.json "Output/$env:RELEASE_TAG-installer-validation.json" --repo $env:GITHUB_REPOSITORY --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Build provenance upload failed' }
