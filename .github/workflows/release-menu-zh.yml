@@ -86,6 +86,7 @@ jobs:
       SOURCE_COMMIT: ${{ needs.discover.outputs.commit }}
       DRAFT_TAG: ${{ needs.discover.outputs.draft }}
       PROFILE: ${{ matrix.profile }}
+      SELECTED_PROFILE: ${{ inputs.profile || 'Both' }}
       RELEASE_TAG: NR-v${{ needs.discover.outputs.version }}-${{ matrix.profile }}-zh-CN
     steps:
       - uses: actions/checkout@v4
@@ -151,5 +152,9 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or !$draft.isDraft) { throw 'Candidate uploads require a draft release' }
           gh release upload $env:DRAFT_TAG "Output/dlss-unlocked-setup-$env:RELEASE_TAG.exe" "Output/dlss-unlocked-standalone-$env:RELEASE_TAG.zip" --repo $env:GITHUB_REPOSITORY --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Candidate upload failed' }
-          gh release upload $env:DRAFT_TAG "temp_optiscaler/release-input/OptiScaler-$env:VERSION-Transfusion-zh-CN.zip" Output/menu-validation.json "Output/$env:RELEASE_TAG-installer-validation.json" --repo $env:GITHUB_REPOSITORY --clobber
+          gh release upload $env:DRAFT_TAG "Output/$env:RELEASE_TAG-installer-validation.json" --repo $env:GITHUB_REPOSITORY --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Build provenance upload failed' }
+          if ($env:PROFILE -eq 'RTX20-30-FP16' -or $env:SELECTED_PROFILE -eq 'RTX40') {
+            gh release upload $env:DRAFT_TAG "temp_optiscaler/release-input/OptiScaler-$env:VERSION-Transfusion-zh-CN.zip" Output/menu-validation.json --repo $env:GITHUB_REPOSITORY --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'Menu provenance upload failed' }
+          }

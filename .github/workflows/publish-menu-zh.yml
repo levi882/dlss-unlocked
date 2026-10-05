@@ -1,0 +1,76 @@
+name: Publish verified Chinese Transfusion packages
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Validated OptiScaler version
+        required: true
+        default: '0.9.34'
+      build_tag:
+        description: Completed candidate draft release tag
+        required: true
+permissions:
+  contents: write
+concurrency:
+  group: publish-chinese-transfusion
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ inputs.version }}
+      BUILD_TAG: ${{ inputs.build_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate candidate provenance and publish both GPU releases
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid version' }
+          $pattern = '^NR-v' + [regex]::Escape($env:VERSION) + '-zh-CN-build-([a-f0-9]{8})-([a-f0-9]{8})$'
+          if ($env:BUILD_TAG -notmatch $pattern) { throw 'Invalid candidate tag' }
+          $sourcePrefix = $matches[1]
+          $target = (git rev-parse "$($matches[2])^{commit}").Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate repository commit not found' }
+          $upstream = gh api "repos/ShyVortex/OptiScaler-DLSSNR-PreSR-Multipass/commits/v$env:VERSION" --jq .sha
+          if ($LASTEXITCODE -ne 0 -or !$upstream.StartsWith($sourcePrefix)) { throw 'Upstream source mismatch' }
+          $candidate = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$env:BUILD_TAG" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or !$candidate.draft) { throw 'Verified candidate draft required' }
+          New-Item -ItemType Directory -Path Output -Force | Out-Null
+          gh release download $env:BUILD_TAG --repo $env:GITHUB_REPOSITORY --pattern '*-zh-CN.exe' --pattern '*-zh-CN.zip' --pattern '*-installer-validation.json' --pattern menu-validation.json --dir Output
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate download failed' }
+          foreach ($file in Get-ChildItem Output -File) {
+            $asset = $candidate.assets | Where-Object name -EQ $file.Name | Select-Object -First 1
+            if (!$asset -or $asset.digest -ne ('sha256:' + (Get-FileHash $file.FullName).Hash.ToLowerInvariant())) { throw "Candidate digest mismatch: $($file.Name)" }
+          }
+          $menu = Get-Content Output/menu-validation.json -Raw | ConvertFrom-Json
+          if ($menu.SourceCommit -ne $upstream) { throw 'Menu validation source mismatch' }
+          foreach ($test in @('low-latency','viewport','chinese-menu','transfusion-menu')) {
+            if ($test -notin $menu.Passed) { throw "Missing menu validation: $test" }
+          }
+          foreach ($profile in @('RTX20-30-FP16','RTX40')) {
+            $tag = "NR-v$env:VERSION-$profile-zh-CN"
+            $report = Get-Content "Output/$tag-installer-validation.json" -Raw | ConvertFrom-Json
+            if ($report.Tag -ne $tag -or !$report.AutomaticSync -or !$report.UninstallRestore -or $report.InstallerFilesMatched -lt 1) { throw "Installer validation incomplete: $tag" }
+            $runtime = if ($profile -eq 'RTX40') { 'ShortFuse SF-v2' } else { 'FP16' }
+            $note = "$profile 版：合入 OptiScaler v$env:VERSION 的输入同步、菜单缩放和窗口边界修复。`n保留 DLSSG-Transfusion 1.4.5.3、中文菜单、$runtime NR，以及运行库自动同步、检查和恢复。"
+            if ($profile -eq 'RTX20-30-FP16') { $note += 'RTX 20 支持为实验性。' }
+            [IO.File]::WriteAllText("$env:GITHUB_WORKSPACE/Output/$tag-notes.md", $note, [Text.UTF8Encoding]::new($false))
+            gh release view $tag --repo $env:GITHUB_REPOSITORY --json isDraft > $null 2>&1
+            if ($LASTEXITCODE -ne 0) {
+              gh release create $tag --repo $env:GITHUB_REPOSITORY --target $target --draft --title "DLSS Unlocked $profile 简体中文 v$env:VERSION" --notes-file "Output/$tag-notes.md"
+              if ($LASTEXITCODE -ne 0) { throw "Release creation failed: $tag" }
+            } else {
+              $release = gh release view $tag --repo $env:GITHUB_REPOSITORY --json isDraft | ConvertFrom-Json
+              if (!$release.isDraft) { throw "Refusing to replace existing public release: $tag" }
+            }
+            gh release upload $tag "Output/dlss-unlocked-setup-$tag.exe" "Output/dlss-unlocked-standalone-$tag.zip" --repo $env:GITHUB_REPOSITORY --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Release upload failed: $tag" }
+          }
+          foreach ($profile in @('RTX20-30-FP16','RTX40')) {
+            gh release edit "NR-v$env:VERSION-$profile-zh-CN" --repo $env:GITHUB_REPOSITORY --draft=false --latest=false
+            if ($LASTEXITCODE -ne 0) { throw "Release publication failed: $profile" }
+          }
